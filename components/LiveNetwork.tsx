@@ -61,6 +61,9 @@ export function LiveRail() {
                 <span>TRUST NETWORK</span>
                 <small>{String(trails.length).padStart(3, "0")} trails</small>
             </div>
+            <span className="pulse-label">
+                <i /> WebMCP entry live
+            </span>
             {!ready ? (
                 <p className="muted">ranking live traces…</p>
             ) : explorers.length ? (
@@ -68,9 +71,6 @@ export function LiveRail() {
             ) : (
                 <p className="muted">invite-only · join a trust network to appear</p>
             )}
-            <span className="pulse-label">
-                <i /> WebMCP entry live
-            </span>
         </aside>
     )
 }

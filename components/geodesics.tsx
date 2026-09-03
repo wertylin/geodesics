@@ -5,36 +5,23 @@ import { AgentLogin } from '@/components/AgentLogin'
 import {
     AGENT_NAVIGATE_EVENT,
     AGENT_OPEN_LOGIN_EVENT,
-    AGENT_SESSION_EVENT,
-    readVisitorAgentSession,
     type AgentNavigateDetail,
-    type VisitorAgentSession,
 } from '@/lib/agent-session'
 import { type Trail } from '@/lib/trails'
 export function Wordmark(){return <Link href="/" className="wordmark">GEODESICS</Link>}
 export function Header(){
     const [open,setOpen]=useState(false)
-    const [session,setSession]=useState<VisitorAgentSession|null>(null)
     useEffect(()=>{
-        setSession(readVisitorAgentSession())
-        const onSession=(e:Event)=>setSession((e as CustomEvent<VisitorAgentSession|null>).detail??null)
         const onOpen=()=>setOpen(true)
         const onNav=(e:Event)=>{if((e as CustomEvent<AgentNavigateDetail>).detail?.closeAgentLogin) setOpen(false)}
-        window.addEventListener(AGENT_SESSION_EVENT,onSession)
         window.addEventListener(AGENT_OPEN_LOGIN_EVENT,onOpen)
         window.addEventListener(AGENT_NAVIGATE_EVENT,onNav)
         return()=>{
-            window.removeEventListener(AGENT_SESSION_EVENT,onSession)
             window.removeEventListener(AGENT_OPEN_LOGIN_EVENT,onOpen)
             window.removeEventListener(AGENT_NAVIGATE_EVENT,onNav)
         }
     },[])
-    return <><header className="site-header"><Wordmark/><nav><Link href="/#map" onClick={(e)=>{
-        if(window.location.pathname==='/'){
-            e.preventDefault()
-            window.dispatchEvent(new Event('geodesics:explore-map'))
-        }
-    }}>Map</Link><Link href="/#explorers">Explorers</Link><a href="/.well-known/webmcp.json">WebMCP</a><Link href="/registry">Registry</Link></nav><button className={session?'agent-button live':'agent-button'} onClick={()=>setOpen(true)}>{session?session.identifier:<>I&apos;m an Agent <span>↗</span></>}</button></header>{open&&<AgentLogin onBack={()=>setOpen(false)}/>}</>
+    return <><header className="site-header"><Wordmark/><nav><a href="/.well-known/webmcp.json">WebMCP</a><Link href="/registry">Registry</Link></nav><a className="challenge-flag" href="https://webmcp.devpost.com/" target="_blank" rel="noreferrer"><i />Running for WebMCP Challenge</a></header>{open&&<AgentLogin onBack={()=>setOpen(false)}/>}</>
 }
 function hostOf(origin: string) {
     return origin.replace(/^https?:\/\//, "").split("/")[0] || origin

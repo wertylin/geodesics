@@ -91,3 +91,51 @@
 @media(prefers-reduced-motion:reduce){
   .globe-figure,.hero-copy,.node-panel{view-transition-name:none}
 }
+
+.hero{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);
+  grid-template-rows:auto auto;
+  align-items:start;
+  justify-content:stretch;
+  column-gap:32px;
+  row-gap:16px;
+  min-height:0;
+  padding:36px 5vw 40px;
+}
+.hero-copy{grid-column:1;grid-row:1;align-self:start}
+.hero-copy h1{margin:16px 0 20px}
+.hero-globe{grid-column:2;grid-row:1;flex:none;width:100%;min-width:0;display:flex;align-items:flex-start;justify-content:center;z-index:1}
+.hero-globe .globe-figure{flex:none;width:100%;max-width:none;height:min(480px,58vh)}
+.hero-globe .globe-figure.compact{height:min(480px,58vh)}
+.hero-aside{grid-column:1;grid-row:2;align-self:end;margin-top:0;max-width:none;width:100%}
+.hero-explore{grid-column:2;grid-row:2;align-self:end;justify-self:center;width:min(280px,100%);justify-content:space-between}
+.hero-aside .pulse-label{margin-top:0;margin-bottom:8px}
+.hero-brief-kicker{appearance:none;background:none;border:0;padding:0;cursor:pointer;display:block}
+.hero-brief-kicker:hover{color:var(--lime)}
+.hero-brief-trigger{appearance:none;background:none;border:0;padding:0;margin:0;color:inherit;font:inherit;letter-spacing:inherit;text-align:left;cursor:pointer;display:flex;flex-direction:column;gap:.06em;width:100%}
+.hero-brief-trigger:hover .hero-line em{text-decoration:underline;text-underline-offset:.12em}
+.hero > .modal-backdrop{grid-column:1/-1;grid-row:1/-1}
+.brief-sheet{background:var(--panel);border:1px solid var(--lime);width:min(520px,100%);padding:36px 32px 32px;position:relative}
+.brief-sheet .hero-sub{max-width:none;margin:18px 0 0;font-size:16px}
+.brief-sheet .agent-door{margin-top:18px}
+.visitor-ask p{margin:0 0 12px;color:var(--ink);font:15px 'Space Grotesk'}
+.visitor-ask em{font-style:italic;font-weight:500}
+.entry-pills{display:flex;gap:10px}
+.entry-pills button{display:inline-flex;align-items:center;gap:8px;background:transparent;color:var(--ink);border:1px solid #5a635c;border-radius:999px;padding:9px 18px 9px 13px;font:14px 'Space Grotesk';cursor:pointer}
+.entry-pills button svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}
+.entry-pills button:hover,.entry-pills button.on{border-color:var(--lime);color:var(--lime)}
+.challenge-flag{margin-left:auto;display:inline-flex;align-items:center;gap:8px;flex-shrink:0;color:var(--lime);border:1px solid #c6f36b44;padding:9px 13px;font:10px 'DM Mono';text-transform:uppercase;letter-spacing:.1em}
+.challenge-flag i{width:6px;height:6px;border-radius:50%;background:var(--lime);box-shadow:0 0 0 4px #c6f36b22;animation:challenge-pulse 2.2s ease-out infinite}
+.challenge-flag:hover{border-color:var(--lime)}
+@keyframes challenge-pulse{0%{box-shadow:0 0 0 0 #c6f36b55}70%{box-shadow:0 0 0 8px #c6f36b00}100%{box-shadow:0 0 0 0 #c6f36b00}}
+@media(max-width:800px){
+  .hero{display:flex;flex-direction:column;padding:24px 16px 32px;min-height:0}
+  .visitor-ask p{font-size:14px}
+  .challenge-flag{padding:7px 9px;font-size:9px;letter-spacing:.06em}
+  .hero-copy{order:1}
+  .hero-globe{order:2}
+  .hero-globe .globe-figure,.hero-globe .globe-figure.compact{height:320px}
+  .hero-explore{order:3;width:100%;max-width:none}
+  .hero-aside{order:4}
+}
