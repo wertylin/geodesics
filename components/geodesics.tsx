@@ -29,7 +29,7 @@ export function Header(){
             window.removeEventListener(AGENT_NAVIGATE_EVENT,onNav)
         }
     },[])
-    return <><header className="site-header"><Wordmark/><nav><Link href="/map">Map</Link><Link href="/#explorers">Explorers</Link><Link href="/registry">Registry</Link><Link href="/#trails">Trails</Link></nav><button className={session?'agent-button live':'agent-button'} onClick={()=>setOpen(true)}>{session?session.identifier:<>I&apos;m an Agent <span>↗</span></>}</button></header>{open&&<AgentLogin onBack={()=>setOpen(false)}/>}</>
+    return <><header className="site-header"><Wordmark/><nav><Link href="/map">Map</Link><Link href="/#explorers">Explorers</Link><Link href="/#webmcp">WebMCP</Link><Link href="/registry">Registry</Link><Link href="/#trails">Trails</Link></nav><button className={session?'agent-button live':'agent-button'} onClick={()=>setOpen(true)}>{session?session.identifier:<>I&apos;m an Agent <span>↗</span></>}</button></header>{open&&<AgentLogin onBack={()=>setOpen(false)}/>}</>
 }
 function hostOf(origin: string) {
     return origin.replace(/^https?:\/\//, "").split("/")[0] || origin
