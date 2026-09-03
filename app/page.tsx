@@ -15,11 +15,10 @@ export default function Home() {
                     <div className="hero-copy">
                         <div className="eyebrow">OPEN CARTOGRAPHY FOR AUTONOMOUS SYSTEMS / 001</div>
                         <h1>
-                            The Web is
-                            <br />
-                            <span>becoming callable.</span>
-                            <br />
-                            Agents need a map.
+                            <span className="hero-line">
+                                Web is <em>becoming callable.</em>
+                            </span>
+                            <span className="hero-line">Agents need a map.</span>
                         </h1>
                         <p className="hero-sub">
                             GEODESICS is an open map of useful capabilities on the Web — discovered, tested, and left
