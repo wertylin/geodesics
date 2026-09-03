@@ -23,7 +23,10 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ trail }, { headers: PUBLIC_AGENT_HEADERS })
     }
     const trails = await listTrails()
-    return NextResponse.json({ trails, count: trails.length }, { headers: PUBLIC_AGENT_HEADERS })
+    return NextResponse.json(
+        { trails, count: trails.length },
+        { headers: { ...PUBLIC_AGENT_HEADERS, "Cache-Control": "public, max-age=60, s-maxage=120, stale-while-revalidate=300" } }
+    )
 }
 
 function isPageWrite(req: NextRequest): boolean {

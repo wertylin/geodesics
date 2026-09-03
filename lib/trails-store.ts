@@ -1,5 +1,31 @@
 import { assertPublicOrigin, formatTrailAge, isLoopbackOrigin, type Trail, type TrailStatus } from "@/lib/trails"
-import { hasDatabase, sql, timed } from "@/lib/db"
+import { hasDatabase, sql } from "@/lib/db"
+
+const TRAIL_CACHE_MS = 20_000
+const TRAIL_GEN = 2
+const QUERY_MS = 6000
+
+const cacheG = globalThis as typeof globalThis & {
+    __geodesicsTrailGen?: number
+    __geodesicsTrailList?: { at: number; trails: Trail[] }
+    __geodesicsTrailInflight?: Promise<Trail[]>
+}
+
+function raceTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+    return new Promise((resolve, reject) => {
+        const t = setTimeout(() => reject(new Error(label)), ms)
+        p.then(
+            (v) => {
+                clearTimeout(t)
+                resolve(v)
+            },
+            (e) => {
+                clearTimeout(t)
+                reject(e)
+            }
+        )
+    })
+}
 
 function withAge(trail: Trail): Trail {
     return { ...trail, age: formatTrailAge(trail.discovered_at) }
@@ -44,21 +70,50 @@ export async function purgeLoopbackTrails(): Promise<number> {
     return rows.length
 }
 
+export function invalidateTrailListCache() {
+    cacheG.__geodesicsTrailList = undefined
+}
+
 export async function listTrails(): Promise<Trail[]> {
     if (!hasDatabase()) return []
-    try {
-        const rows = await timed(
-            (q) => q`
-                SELECT id, agent, origin, route, status, goal, discovered_at
-                FROM trails
-                ORDER BY discovered_at DESC
-            `,
-            2500
-        )
-        return rows.map(rowToTrail).filter((t) => !isLoopbackOrigin(t.origin))
-    } catch {
-        return []
+    if (cacheG.__geodesicsTrailGen !== TRAIL_GEN) {
+        cacheG.__geodesicsTrailGen = TRAIL_GEN
+        cacheG.__geodesicsTrailInflight = undefined
+        cacheG.__geodesicsTrailList = undefined
     }
+    const hit = cacheG.__geodesicsTrailList
+    if (hit && Date.now() - hit.at < TRAIL_CACHE_MS) return hit.trails
+    if (cacheG.__geodesicsTrailInflight) {
+        return raceTimeout(cacheG.__geodesicsTrailInflight, QUERY_MS, "trails inflight timeout").catch(
+            () => hit?.trails ?? []
+        )
+    }
+
+    cacheG.__geodesicsTrailInflight = (async () => {
+        const rows = await raceTimeout(
+            Promise.resolve(
+                sql()`
+                    SELECT id, agent, origin, route, status, goal, discovered_at
+                    FROM trails
+                    ORDER BY discovered_at DESC
+                    LIMIT 120
+                `
+            ),
+            QUERY_MS,
+            "trails list timeout"
+        )
+        const trails = rows.map(rowToTrail).filter((t) => !isLoopbackOrigin(t.origin))
+        cacheG.__geodesicsTrailList = { at: Date.now(), trails }
+        return trails
+    })()
+        .catch((err) => {
+            console.error("[trails] listTrails failed", err)
+            return hit?.trails ?? []
+        })
+        .finally(() => {
+            cacheG.__geodesicsTrailInflight = undefined
+        })
+    return cacheG.__geodesicsTrailInflight
 }
 
 export async function getTrail(id: string): Promise<Trail | null> {
@@ -107,5 +162,6 @@ export async function leaveTrail(input: {
         )
         RETURNING id, agent, origin, route, status, goal, discovered_at
     `
+    invalidateTrailListCache()
     return rowToTrail(rows[0])
 }

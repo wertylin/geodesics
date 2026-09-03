@@ -6,6 +6,7 @@
   html,body{overflow-x:clip}
   .site-header{height:auto;min-height:64px;padding:12px 16px;gap:12px;min-width:0;justify-content:space-between}
   .wordmark{font-size:15px;letter-spacing:.08em;min-width:0}
+  .geodesics-mark{height:52px;width:52px}
   .agent-button{padding:9px 11px;font-size:10px;flex-shrink:0}
   .hero-copy,.hero-sub,.agent-door{max-width:100%}
   .hero h1{font-size:clamp(32px,8.4vw,64px);letter-spacing:-.04em;line-height:1.05;margin:18px 0;max-width:100%;overflow-wrap:break-word}
@@ -58,7 +59,7 @@
 .trail-actions .lime-button,.trail-actions .outline-button{width:100%;margin-top:0;padding:12px 10px;gap:8px;justify-content:center}
 
 .hero h1{display:flex;flex-direction:column;gap:.06em}
-.hero-line{display:block;color:inherit;white-space:nowrap}
+.hero-line{display:block;color:inherit}
 .hero h1 .hero-line em{color:var(--lime);font-style:normal}
 
 @media(max-width:800px){
@@ -103,13 +104,21 @@
   min-height:0;
   padding:36px 5vw 40px;
 }
-.hero-copy{grid-column:1;grid-row:1;align-self:start}
-.hero-copy h1{margin:16px 0 20px}
-.hero-globe{grid-column:2;grid-row:1;flex:none;width:100%;min-width:0;display:flex;align-items:flex-start;justify-content:center;z-index:1}
+.wordmark{display:inline-flex;align-items:center;gap:10px;font:600 18px 'DM Mono';letter-spacing:.14em}
+.site-header{height:88px}
+.geodesics-mark{height:56px;width:56px;flex-shrink:0;overflow:visible;display:block}
+.mark-track{fill:none;stroke:#e8eee3;stroke-width:1.6;opacity:.35}
+.mark-run{fill:none;stroke:var(--lime);stroke-width:1.7;stroke-linecap:round;stroke-dasharray:.22 .78;filter:drop-shadow(0 0 4px #c6f36b);animation:mark-enforce 18s linear infinite}
+@keyframes mark-enforce{to{stroke-dashoffset:-1}}
+@media(prefers-reduced-motion:reduce){
+  .mark-run{animation:none;opacity:.85;stroke-dasharray:none}
+}
+.hero-copy{grid-column:1;grid-row:1;align-self:start;display:flex;flex-direction:column;gap:22px}
+.hero-lead h1,.hero-copy h1{margin:0}
+.hero-globe{grid-column:2;grid-row:1;flex:none;width:100%;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:18px;z-index:1}
 .hero-globe .globe-figure{flex:none;width:100%;max-width:none;height:min(480px,58vh)}
 .hero-globe .globe-figure.compact{height:min(480px,58vh)}
-.hero-aside{grid-column:1;grid-row:2;align-self:end;margin-top:0;max-width:none;width:100%}
-.hero-explore{grid-column:2;grid-row:2;align-self:end;justify-self:center;width:min(280px,100%);justify-content:space-between}
+.hero-aside{margin-top:0;max-width:none;width:100%}
 .hero-aside .pulse-label{margin-top:0;margin-bottom:8px}
 .hero-brief-kicker{appearance:none;background:none;border:0;padding:0;cursor:pointer;display:block}
 .hero-brief-kicker:hover{color:var(--lime)}
@@ -119,23 +128,65 @@
 .brief-sheet{background:var(--panel);border:1px solid var(--lime);width:min(520px,100%);padding:36px 32px 32px;position:relative}
 .brief-sheet .hero-sub{max-width:none;margin:18px 0 0;font-size:16px}
 .brief-sheet .agent-door{margin-top:18px}
-.visitor-ask p{margin:0 0 12px;color:var(--ink);font:15px 'Space Grotesk'}
-.visitor-ask em{font-style:italic;font-weight:500}
-.entry-pills{display:flex;gap:10px}
-.entry-pills button{display:inline-flex;align-items:center;gap:8px;background:transparent;color:var(--ink);border:1px solid #5a635c;border-radius:999px;padding:9px 18px 9px 13px;font:14px 'Space Grotesk';cursor:pointer}
-.entry-pills button svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}
-.entry-pills button:hover,.entry-pills button.on{border-color:var(--lime);color:var(--lime)}
+.hero-entry{display:flex;flex-direction:column;align-items:stretch;gap:10px;width:min(320px,100%);flex-shrink:0}
+.visitor-ask{margin:0;text-align:center;color:var(--muted);font:13px 'Space Grotesk'}
+.visitor-ask em{font-style:italic;font-weight:500;color:var(--ink)}
+.entry-dock{border:1px solid var(--line);overflow:hidden;background:var(--panel)}
+.entry-pills{display:grid;grid-template-columns:1fr 1fr}
+.entry-dock button{appearance:none;background:transparent;color:var(--muted);border:0;border-radius:0;font:12px 'DM Mono';text-transform:uppercase;letter-spacing:.08em;cursor:pointer}
+.entry-pills button{display:inline-flex;align-items:center;justify-content:center;gap:8px;border-right:1px solid var(--line);padding:12px 10px}
+.entry-pills button:last-child{border-right:0}
+.entry-pills button svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}
+.entry-pills button:hover,.entry-pills button.on{color:var(--lime);background:#c6f36b0f}
+.hero-explore{width:100%;margin:0;display:inline-flex;justify-content:space-between;align-items:center;gap:28px;padding:14px 16px;border-top:1px solid var(--line);cursor:not-allowed;opacity:1}
+.hero-explore:disabled{opacity:1}
+.hero-explore span{font-size:17px}
+.entry-dock[data-live="true"] .hero-explore{
+  background:var(--lime);
+  color:#111;
+  cursor:pointer;
+}
 .challenge-flag{margin-left:auto;display:inline-flex;align-items:center;gap:8px;flex-shrink:0;color:var(--lime);border:1px solid #c6f36b44;padding:9px 13px;font:10px 'DM Mono';text-transform:uppercase;letter-spacing:.1em}
 .challenge-flag i{width:6px;height:6px;border-radius:50%;background:var(--lime);box-shadow:0 0 0 4px #c6f36b22;animation:challenge-pulse 2.2s ease-out infinite}
 .challenge-flag:hover{border-color:var(--lime)}
 @keyframes challenge-pulse{0%{box-shadow:0 0 0 0 #c6f36b55}70%{box-shadow:0 0 0 8px #c6f36b00}100%{box-shadow:0 0 0 0 #c6f36b00}}
+.challenge-flag .flag-compact{display:none}
+
 @media(max-width:800px){
+  .site-header{
+    height:auto;
+    min-height:0;
+    flex-wrap:nowrap;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+    padding:10px 14px;
+  }
+  .wordmark{
+    min-width:0;
+    gap:6px;
+    font-size:12px;
+    letter-spacing:.1em;
+    overflow:hidden;
+  }
+  .geodesics-mark{height:34px;width:34px}
+  .challenge-flag{
+    margin-left:0;
+    flex:0 1 auto;
+    min-width:0;
+    padding:6px 8px;
+    font-size:9px;
+    letter-spacing:.06em;
+    white-space:nowrap;
+  }
+  .challenge-flag .flag-full{display:none}
+  .challenge-flag .flag-compact{display:inline}
   .hero{display:flex;flex-direction:column;padding:24px 16px 32px;min-height:0}
-  .visitor-ask p{font-size:14px}
-  .challenge-flag{padding:7px 9px;font-size:9px;letter-spacing:.06em}
-  .hero-copy{order:1}
+  .hero-copy{display:contents}
+  .hero-lead{order:1}
+  .hero-lead h1{margin:16px 0 8px}
   .hero-globe{order:2}
   .hero-globe .globe-figure,.hero-globe .globe-figure.compact{height:320px}
-  .hero-explore{order:3;width:100%;max-width:none}
+  .hero-entry{width:100%}
   .hero-aside{order:4}
 }

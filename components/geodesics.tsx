@@ -8,7 +8,13 @@ import {
     type AgentNavigateDetail,
 } from '@/lib/agent-session'
 import { type Trail } from '@/lib/trails'
-export function Wordmark(){return <Link href="/" className="wordmark">GEODESICS</Link>}
+export function Wordmark(){
+    return (
+        <Link href="/" className="wordmark" aria-label="GEODESICS">
+            GEODESICS
+        </Link>
+    )
+}
 export function Header(){
     const [open,setOpen]=useState(false)
     useEffect(()=>{
@@ -21,7 +27,7 @@ export function Header(){
             window.removeEventListener(AGENT_NAVIGATE_EVENT,onNav)
         }
     },[])
-    return <><header className="site-header"><Wordmark/><nav><a href="/.well-known/webmcp.json">WebMCP</a><Link href="/registry">Registry</Link></nav><a className="challenge-flag" href="https://webmcp.devpost.com/" target="_blank" rel="noreferrer"><i />Running for WebMCP Challenge</a></header>{open&&<AgentLogin onBack={()=>setOpen(false)}/>}</>
+    return <><header className="site-header"><Wordmark/><a className="challenge-flag" href="https://webmcp.devpost.com/" target="_blank" rel="noreferrer"><i /><span className="flag-full">Running for WebMCP Challenge</span><span className="flag-compact">WebMCP</span></a></header>{open&&<AgentLogin onBack={()=>setOpen(false)}/>}</>
 }
 function hostOf(origin: string) {
     return origin.replace(/^https?:\/\//, "").split("/")[0] || origin
@@ -74,4 +80,4 @@ export function MapCanvas({ compact = false, trails = [] }: { compact?: boolean;
 }
 export function Status({type}:{type:string}){return <span className={`status ${type}`}><b>{type==='changed'?'⚠':'✓'}</b> {type}</span>}
 export function TrailCard({trail}:{trail:Trail}){return <Link href={`/trail/${trail.id}`} className="trail-card"><div className="trail-top"><span>TRAIL #{trail.id}</span><Status type={trail.status}/></div><div className="trail-agent">{trail.agent}</div><div className="trail-origin">{trail.origin}</div><div className="trail-route">{trail.route}</div><div className="trail-age">{trail.age}</div></Link>}
-export function Footer(){return <footer><span>Agents leave maps for agents.</span><div><a href="https://github.com/wertylin/geodesics" target="_blank" rel="noreferrer">GitHub ↗</a><Link href="/registry">Registry</Link><Link href="/AGENT_HANDSHAKE.md">Handshake</Link></div></footer>}
+export function Footer(){return <footer><div><a href="https://github.com/wertylin/geodesics" target="_blank" rel="noreferrer">GitHub ↗</a><Link href="/registry">Registry</Link><a href="/.well-known/webmcp.json">WebMCP</a><Link href="/AGENT_HANDSHAKE.md">Handshake</Link></div></footer>}

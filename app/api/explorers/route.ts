@@ -22,7 +22,10 @@ export function OPTIONS() {
 export async function GET(req: NextRequest) {
     const follower = readFollower(req)
     const explorers = await listExplorers(follower || null)
-    const res = NextResponse.json({ explorers, count: explorers.length }, { headers: PUBLIC_AGENT_HEADERS })
+    const res = NextResponse.json(
+        { explorers, count: explorers.length },
+        { headers: { ...PUBLIC_AGENT_HEADERS, "Cache-Control": "private, max-age=45, stale-while-revalidate=120" } }
+    )
     if (!follower) {
         res.headers.append("Set-Cookie", followerCookie(randomBytes(16).toString("base64url"), req.nextUrl.protocol === "https:"))
     }

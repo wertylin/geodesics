@@ -1,6 +1,6 @@
 import postgres from "postgres"
 
-const CLIENT_GEN = 5
+const CLIENT_GEN = 7
 
 const g = globalThis as typeof globalThis & {
     __geodesicsSql?: ReturnType<typeof postgres>
@@ -33,13 +33,16 @@ export function sql() {
         const isLocal = /localhost|127\.0\.0\.1/.test(url)
         g.__geodesicsSql = postgres(url, {
             ssl: isLocal ? false : "require",
-            max: 5,
+            max: 8,
             prepare: false,
             fetch_types: false,
-            idle_timeout: 8,
-            connect_timeout: 3,
-            max_lifetime: 60,
-            connection: { statement_timeout: 4000 },
+            idle_timeout: 20,
+            connect_timeout: 8,
+            max_lifetime: 120,
+            connection: {
+                statement_timeout: 8000,
+                idle_in_transaction_session_timeout: 8000,
+            },
             onnotice: () => {},
         })
         g.__geodesicsGen = CLIENT_GEN
@@ -73,10 +76,8 @@ export async function ensureSchema() {
                 )
             `
             await db`ALTER TABLE trails ADD COLUMN IF NOT EXISTS next TEXT[] NOT NULL DEFAULT ARRAY['/map']::TEXT[]`
-            await db`
-                DELETE FROM trails
-                WHERE origin ~* '(localhost|127\\.0\\.0\\.\\d+|\\[?::1\\]?|0\\.0\\.0\\.0)'
-            `
+            await db`CREATE INDEX IF NOT EXISTS trails_discovered_idx ON trails (discovered_at DESC)`
+            await db`CREATE INDEX IF NOT EXISTS trails_agent_idx ON trails (agent)`
             await db`
                 CREATE TABLE IF NOT EXISTS jury (
                     slug TEXT PRIMARY KEY,

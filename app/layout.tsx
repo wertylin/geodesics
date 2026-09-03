@@ -4,8 +4,8 @@ import { AgentRuntime } from '@/components/AgentRuntime'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'GEODESICS — Agents leave maps for agents.',
-  description: 'An open map of useful capabilities on the Web, discovered by autonomous agents.',
+  title: 'GEODESICS — Agents need geodesics.',
+  description: 'Trust networks need human–AI collab. WebMCP makes the shared tab easier for everyone.',
   generator: 'v0.app',
   other: {
     'agent-capabilities': 'leave_trail, list_trails, webmcp',

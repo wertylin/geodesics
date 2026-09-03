@@ -1,60 +1,134 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useSyncExternalStore } from "react"
 import { ExplorersBoard } from "@/components/ExplorersBoard"
 import { GeodesicGlobe } from "@/components/GeodesicGlobe"
 import type { Explorer } from "@/lib/explorers"
 import type { Trail } from "@/lib/trails"
 
-let trailsOnce: Promise<Trail[]> | null = null
+const LIVE_KEY = "geodesics_live_rail_v4"
+const TTL_MS = 120_000
 
-function loadTrails(): Promise<Trail[]> {
-    if (!trailsOnce) {
-        const ac = new AbortController()
-        const timer = setTimeout(() => ac.abort(), 5000)
-        trailsOnce = fetch("/api/trails", { signal: ac.signal })
-            .then((r) => r.json())
-            .then((d: { trails?: Trail[] }) => (Array.isArray(d.trails) ? d.trails : []))
-            .catch(() => [] as Trail[])
-            .finally(() => {
-                clearTimeout(timer)
-                setTimeout(() => {
-                    trailsOnce = null
-                }, 2000)
-            })
-    }
-    return trailsOnce
+type LiveBundle = {
+    trails: Trail[]
+    explorers: Explorer[]
+    at: number
+    explorersReady: boolean
 }
 
-function useLiveTrails() {
-    const [trails, setTrails] = useState<Trail[]>([])
-    const [explorers, setExplorers] = useState<Explorer[]>([])
-    const [ready, setReady] = useState(false)
+let mem: LiveBundle | null = null
+let trailsInflight: Promise<void> | null = null
+let explorersInflight: Promise<void> | null = null
+const listeners = new Set<() => void>()
+
+function emit() {
+    listeners.forEach((fn) => fn())
+}
+
+function hydrate(): LiveBundle | null {
+    if (mem) return mem
+    try {
+        const raw = sessionStorage.getItem(LIVE_KEY)
+        if (!raw) return null
+        const parsed = JSON.parse(raw) as LiveBundle
+        if (!Array.isArray(parsed.trails) || !Array.isArray(parsed.explorers)) return null
+        mem = {
+            ...parsed,
+            explorersReady: parsed.explorersReady || parsed.explorers.length > 0,
+        }
+        return mem
+    } catch {
+        return null
+    }
+}
+
+function persist(patch: Partial<LiveBundle>) {
+    const prev = mem ?? { trails: [], explorers: [], at: 0, explorersReady: false }
+    const explorers = patch.explorers?.length ? patch.explorers : prev.explorers
+    mem = {
+        trails: patch.trails ?? prev.trails,
+        explorers,
+        at: patch.at ?? Date.now(),
+        explorersReady: patch.explorersReady ?? prev.explorersReady,
+    }
+    try {
+        sessionStorage.setItem(LIVE_KEY, JSON.stringify(mem))
+    } catch {
+        /* ignore */
+    }
+    emit()
+}
+
+function loadTrails() {
+    if (trailsInflight) return trailsInflight
+    trailsInflight = fetch("/api/trails", { signal: AbortSignal.timeout(8000) })
+        .then((r) => r.json())
+        .then((d: { trails?: Trail[] }) => {
+            persist({ trails: Array.isArray(d.trails) ? d.trails : [], at: Date.now() })
+        })
+        .catch(() => {
+            persist({ trails: mem?.trails ?? [], at: Date.now() })
+        })
+        .finally(() => {
+            trailsInflight = null
+        })
+    return trailsInflight
+}
+
+function loadExplorers() {
+    if (explorersInflight) return explorersInflight
+    explorersInflight = fetch("/api/explorers", { credentials: "include", signal: AbortSignal.timeout(8000) })
+        .then((r) => r.json())
+        .then((d: { explorers?: Explorer[] }) => {
+            persist({
+                explorers: Array.isArray(d.explorers) ? d.explorers.slice(0, 5) : [],
+                explorersReady: true,
+                at: Date.now(),
+            })
+        })
+        .catch(() => {
+            persist({ explorers: mem?.explorers ?? [], explorersReady: true, at: Date.now() })
+        })
+        .finally(() => {
+            explorersInflight = null
+        })
+    return explorersInflight
+}
+
+function subscribe(fn: () => void) {
+    listeners.add(fn)
+    return () => {
+        listeners.delete(fn)
+    }
+}
+
+function snapshot(): LiveBundle | null {
+    return mem
+}
+
+function useLive() {
+    const snap = useSyncExternalStore(subscribe, snapshot, () => null)
 
     useEffect(() => {
-        let on = true
-        void Promise.all([
-            loadTrails(),
-            fetch("/api/explorers", { credentials: "include" })
-                .then((r) => r.json())
-                .then((d: { explorers?: Explorer[] }) => (Array.isArray(d.explorers) ? d.explorers : []))
-                .catch(() => [] as Explorer[]),
-        ]).then(([rows, board]) => {
-            if (!on) return
-            setTrails(rows)
-            setExplorers(board.slice(0, 5))
-            setReady(true)
-        })
-        return () => {
-            on = false
-        }
+        hydrate()
+        emit()
+        const hit = snapshot()
+        const now = Date.now()
+        const trailsFresh = Boolean(hit && now - hit.at < TTL_MS)
+        const explorersFresh = Boolean(hit?.explorersReady && hit.explorers.length > 0 && now - hit.at < TTL_MS)
+        if (!trailsFresh) void loadTrails()
+        if (!explorersFresh) void loadExplorers()
     }, [])
 
-    return { trails, explorers, ready }
+    return {
+        trails: snap?.trails ?? [],
+        explorers: snap?.explorers ?? [],
+        explorersReady: Boolean(snap?.explorersReady),
+    }
 }
 
 export function LiveRail() {
-    const { trails, explorers, ready } = useLiveTrails()
+    const { trails, explorers, explorersReady } = useLive()
     return (
         <aside id="explorers" className="hero-aside explorers-rail">
             <div className="explorers-rail-head">
@@ -64,7 +138,7 @@ export function LiveRail() {
             <span className="pulse-label">
                 <i /> WebMCP entry live
             </span>
-            {!ready ? (
+            {!explorersReady && !explorers.length ? (
                 <p className="muted">ranking live traces…</p>
             ) : explorers.length ? (
                 <ExplorersBoard initial={explorers} compact />
@@ -76,6 +150,6 @@ export function LiveRail() {
 }
 
 export function LiveGlobe({ compact = false }: { compact?: boolean }) {
-    const { trails } = useLiveTrails()
+    const { trails } = useLive()
     return <GeodesicGlobe trails={trails} compact={compact} />
 }

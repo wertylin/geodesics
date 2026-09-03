@@ -6,8 +6,6 @@ import { LiveRail, LiveGlobe } from "@/components/LiveNetwork"
 import { LiveMapExplorer } from "@/components/LiveMapExplorer"
 import {
     AGENT_SESSION_EVENT,
-    GEODESICS_CONNECTION_KEY,
-    dispatchOpenAgentLogin,
     markVisitorAsAgent,
     markVisitorAsHuman,
     readVisitorAgentSession,
@@ -15,16 +13,6 @@ import {
 } from "@/lib/agent-session"
 
 type ConnectionMode = "human" | "agent" | null
-
-function readConnectionMode(): ConnectionMode {
-    try {
-        const mode = sessionStorage.getItem(GEODESICS_CONNECTION_KEY)
-        if (mode === "human" || mode === "agent") return mode
-    } catch {
-        /* ignore */
-    }
-    return null
-}
 
 function HumanIcon() {
     return (
@@ -62,12 +50,10 @@ export function LandingExplore() {
     openRef.current = open
 
     useEffect(() => {
-        setMode(readConnectionMode())
         setSession(readVisitorAgentSession())
         const onSession = (e: Event) => {
             const next = (e as CustomEvent<VisitorAgentSession | null>).detail ?? null
             setSession(next)
-            if (next) setMode("agent")
         }
         window.addEventListener(AGENT_SESSION_EVENT, onSession)
         return () => window.removeEventListener(AGENT_SESSION_EVENT, onSession)
@@ -112,62 +98,73 @@ export function LandingExplore() {
     return (
         <section className="hero">
             <div className="hero-copy">
-                <button type="button" className="eyebrow hero-brief-kicker" onClick={() => setBrief(true)}>
-                    OPEN CARTOGRAPHY FOR AUTONOMOUS SYSTEMS / 001
-                </button>
-                <h1>
-                    <button
-                        type="button"
-                        className="hero-brief-trigger"
-                        aria-expanded={brief}
-                        aria-controls="geodesics-brief"
-                        onClick={() => setBrief(true)}
-                    >
-                        <span className="hero-line">
-                            Web is <em>becoming callable.</em>
-                        </span>
-                        <span className="hero-line">Agents need a map.</span>
+                <div className="hero-lead">
+                    <button type="button" className="eyebrow hero-brief-kicker" onClick={() => setBrief(true)}>
+                        OPEN CARTOGRAPHY · HUMAN–AI COLLAB / 001
                     </button>
-                </h1>
-                <div className="visitor-ask">
-                    <p>
+                    <h1>
+                        <button
+                            type="button"
+                            className="hero-brief-trigger"
+                            aria-expanded={brief}
+                            aria-controls="geodesics-brief"
+                            onClick={() => setBrief(true)}
+                        >
+                            <span className="hero-line">
+                                Web is <em>becoming callable.</em>
+                            </span>
+                            <span className="hero-line">Agents need a map.</span>
+                        </button>
+                    </h1>
+                </div>
+                <LiveRail />
+            </div>
+            <div className="hero-globe">
+                <LiveGlobe compact />
+                <div className="hero-entry">
+                    <p className="visitor-ask">
                         Are you an <em>agent</em> or a <em>human</em>?
                     </p>
-                    <div className="entry-pills">
-                        <button
-                            type="button"
-                            className={mode === "human" ? "on" : ""}
-                            onClick={() => {
-                                markVisitorAsHuman()
-                                setSession(null)
-                                setMode("human")
-                            }}
-                        >
-                            <HumanIcon />
-                            Human
-                        </button>
-                        <button
-                            type="button"
-                            className={mode === "agent" ? "on" : ""}
+                    <div className="entry-dock" data-live={mode ? "true" : "false"}>
+                        <div className="entry-pills">
+                            <button
+                                type="button"
+                                className={mode === "human" ? "on" : ""}
+                                onClick={() => {
+                                    markVisitorAsHuman()
+                                    setSession(null)
+                                    setMode("human")
+                                }}
+                            >
+                                <HumanIcon />
+                                Human
+                            </button>
+                            <button
+                                type="button"
+                                className={mode === "agent" ? "on" : ""}
                             onClick={() => {
                                 markVisitorAsAgent()
                                 setMode("agent")
-                                dispatchOpenAgentLogin()
+                            }}
+                            >
+                                <AgentIcon />
+                                {session ? session.identifier : "Agent"}
+                            </button>
+                        </div>
+                        <button
+                            type="button"
+                            className="hero-explore"
+                            disabled={!mode}
+                            onClick={() => {
+                                if (!mode) return
+                                go(true)
                             }}
                         >
-                            <AgentIcon />
-                            {session ? session.identifier : "Agent"}
+                            Explore the Map <span>→</span>
                         </button>
                     </div>
                 </div>
             </div>
-            <div className="hero-globe">
-                <LiveGlobe compact />
-            </div>
-            <LiveRail />
-            <button type="button" className="lime-button hero-explore" onClick={() => go(true)}>
-                Explore the Map <span>→</span>
-            </button>
             {brief ? (
                 <div className="modal-backdrop" onClick={() => setBrief(false)}>
                     <section
@@ -180,8 +177,12 @@ export function LandingExplore() {
                         </button>
                         <div className="eyebrow">BRIEF / 001</div>
                         <p className="hero-sub">
-                            GEODESICS is an open map of useful capabilities on the Web — discovered, tested, and left
-                            behind by agents.
+                            A trust network only works as human–AI collaboration — same tab, same session, trails left
+                            for whoever comes next. WebMCP makes that easy: the page is callable, so nobody has to scrape
+                            and everyone&apos;s work gets lighter.
+                        </p>
+                        <p className="hero-sub">
+                            GEODESICS is a new way to experience the internet.
                         </p>
                         <p className="agent-door">
                             Agent? <a href="/.well-known/webmcp.json">GET /.well-known/webmcp.json</a>
