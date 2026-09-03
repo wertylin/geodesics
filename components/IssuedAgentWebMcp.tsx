@@ -1,0 +1,315 @@
+"use client"
+
+import { useEffect } from "react"
+import { useRouter } from "next/navigation"
+import { AGENT_HTTP_ENDPOINTS, OPENCLAW_WEBMCP_RULE } from "@/lib/agent-surface-catalog"
+import {
+    AGENT_NAVIGATE_EVENT,
+    clearVisitorAgentSession,
+    completeAgentLogin,
+    dispatchAgentNavigate,
+    dispatchOpenAgentLogin,
+    GEODESICS_CONNECTION_KEY,
+    readVisitorAgentSession,
+    visitorSessionFromLoginPayload,
+    type AgentNavigateDetail,
+} from "@/lib/agent-session"
+import { executePageWebMcpTool, listPageWebMcpTools, registerPageWebMcpTool, toWebMcpToolText } from "@/lib/webmcp-page-agent"
+
+const LOGIN_DESC =
+    "Authenticate an issued GEODESICS visitor agent. Call from any view — tool lives on the page registry. After success, visitor session is set and trail tools unlock."
+
+export function IssuedAgentWebMcp() {
+    const router = useRouter()
+
+    useEffect(() => {
+        const onNavigate = (event: Event) => {
+            const href = (event as CustomEvent<AgentNavigateDetail>).detail?.href
+            if (href) {
+                router.push(href)
+                router.refresh()
+            }
+        }
+        window.addEventListener(AGENT_NAVIGATE_EVENT, onNavigate)
+        return () => window.removeEventListener(AGENT_NAVIGATE_EVENT, onNavigate)
+    }, [router])
+
+    useEffect(() => {
+        registerPageWebMcpTool({
+            name: "geodesics_agent_login",
+            description: LOGIN_DESC,
+            inputSchema: {
+                type: "object",
+                properties: {
+                    identifier: {
+                        type: "string",
+                        description: "Issued agent identifier or agent email.",
+                    },
+                    secret: { type: "string", description: "Issued secret. Required." },
+                },
+                required: ["identifier", "secret"],
+            },
+            execute: async (input) => {
+                const identifier = String(input.identifier ?? "").trim()
+                const secret = String(input.secret ?? "").trim()
+                const res = await fetch("/api/agent/login", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    credentials: "include",
+                    body: JSON.stringify({ identifier, secret }),
+                })
+                const data = (await res.json().catch(() => ({}))) as Record<string, unknown>
+                if (!res.ok) {
+                    return toWebMcpToolText({
+                        success: false,
+                        error: typeof data.error === "string" ? data.error : "Agent login failed",
+                    })
+                }
+                const session = visitorSessionFromLoginPayload(data)
+                if (!session) {
+                    return toWebMcpToolText({ success: false, error: "Login succeeded but session payload missing" })
+                }
+                completeAgentLogin(session)
+                return toWebMcpToolText({
+                    success: true,
+                    visitor_agent: session.identifier,
+                    next: [
+                        "geodesics_list_trails",
+                        "geodesics_leave_trail",
+                        "geodesics_open_map",
+                        "geodesics_list_agent_surface",
+                    ],
+                    hint: "Session is set. Drive the page with WebMCP, not curl.",
+                    agent: session,
+                })
+            },
+        })
+
+        registerPageWebMcpTool({
+            name: "geodesics_agent_logout",
+            description: "Clear the visitor agent session in this tab.",
+            inputSchema: { type: "object", properties: {} },
+            execute: async () => {
+                await fetch("/api/agent/logout", { method: "POST", credentials: "include" })
+                clearVisitorAgentSession()
+                return toWebMcpToolText({ success: true })
+            },
+        })
+
+        registerPageWebMcpTool({
+            name: "geodesics_get_connection_mode",
+            description: "Visitor vs unknown connection plus issued visitor session.",
+            inputSchema: { type: "object", properties: {} },
+            annotations: { readOnlyHint: "true" },
+            execute: async () => {
+                let mode = "unknown"
+                try {
+                    mode = sessionStorage.getItem(GEODESICS_CONNECTION_KEY) ?? "unknown"
+                } catch {
+                    mode = "unavailable"
+                }
+                const visitor = readVisitorAgentSession()
+                return toWebMcpToolText({
+                    success: true,
+                    mode,
+                    visitor_agent: visitor?.identifier ?? null,
+                    visitor,
+                    href: window.location.pathname,
+                })
+            },
+        })
+
+        registerPageWebMcpTool({
+            name: "geodesics_list_agent_surface",
+            description:
+                "Dual map: HTTP endpoints (discovery / gated CRUD, no execute) vs live in-page WebMCP tools.",
+            inputSchema: { type: "object", properties: {} },
+            annotations: { readOnlyHint: "true" },
+            execute: async () => {
+                const live = await listPageWebMcpTools()
+                return toWebMcpToolText({
+                    success: true,
+                    rule: OPENCLAW_WEBMCP_RULE,
+                    http: AGENT_HTTP_ENDPOINTS,
+                    webmcp_live: live.map((t) => ({ name: t.name, source: t.source })),
+                    next: ["geodesics_agent_login", "geodesics_open_agent_login"],
+                })
+            },
+        })
+
+        registerPageWebMcpTool({
+            name: "geodesics_list_trails",
+            description: "List discovered trails on the map. No login.",
+            inputSchema: { type: "object", properties: {} },
+            annotations: { readOnlyHint: "true" },
+            execute: async () => {
+                const res = await fetch("/api/trails", { credentials: "include" })
+                const data = (await res.json().catch(() => ({}))) as Record<string, unknown>
+                if (!res.ok) {
+                    return toWebMcpToolText({
+                        success: false,
+                        error: typeof data.error === "string" ? data.error : "Trails fetch failed",
+                    })
+                }
+                return toWebMcpToolText({
+                    success: true,
+                    ...data,
+                    hint: "geodesics_open_trail with { id } or geodesics_leave_trail to add one.",
+                })
+            },
+        })
+
+        registerPageWebMcpTool({
+            name: "geodesics_open_map",
+            description: "Navigate this tab to /map.",
+            inputSchema: { type: "object", properties: {} },
+            execute: async () => {
+                dispatchAgentNavigate("/map")
+                return toWebMcpToolText({ success: true, href: "/map" })
+            },
+        })
+
+        registerPageWebMcpTool({
+            name: "geodesics_open_registry",
+            description: "Navigate this tab to /registry.",
+            inputSchema: { type: "object", properties: {} },
+            execute: async () => {
+                dispatchAgentNavigate("/registry")
+                return toWebMcpToolText({ success: true, href: "/registry" })
+            },
+        })
+
+        registerPageWebMcpTool({
+            name: "geodesics_open_trail",
+            description: "Navigate this tab to a trail by id.",
+            inputSchema: {
+                type: "object",
+                properties: { id: { type: "string", description: "Trail id." } },
+                required: ["id"],
+            },
+            execute: async (input) => {
+                const id = String(input.id ?? "").trim()
+                if (!id) return toWebMcpToolText({ success: false, error: "id is required" })
+                const href = `/trail/${encodeURIComponent(id)}`
+                dispatchAgentNavigate(href)
+                return toWebMcpToolText({ success: true, href })
+            },
+        })
+
+        registerPageWebMcpTool({
+            name: "geodesics_open_agent_login",
+            description: "Open the agent login surface in this tab.",
+            inputSchema: { type: "object", properties: {} },
+            execute: async () => {
+                dispatchOpenAgentLogin()
+                dispatchAgentNavigate("/agent", false)
+                return toWebMcpToolText({ success: true, href: "/agent" })
+            },
+        })
+
+        registerPageWebMcpTool({
+            name: "geodesics_leave_trail",
+            description:
+                "Leave a discovered path on the map. No login. origin/url + route/capabilities_found.",
+            inputSchema: {
+                type: "object",
+                properties: {
+                    origin: { type: "string", description: "Host where the capability was found." },
+                    url: { type: "string", description: "Alias for origin." },
+                    route: {
+                        type: "string",
+                        description: "Observed path. e.g. search → product → checkout",
+                    },
+                    capabilities_found: { type: "string", description: "Alias for route." },
+                    goal: { type: "string", description: "Optional intent." },
+                    description: { type: "string", description: "Alias for goal." },
+                    note: { type: "string", description: "Alias for goal." },
+                    agent: { type: "string", description: "Optional name." },
+                    status: {
+                        type: "string",
+                        enum: ["verified", "observed", "changed"],
+                        description: "Default observed.",
+                    },
+                },
+            },
+            execute: async (input) => {
+                const res = await fetch("/api/trails", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    credentials: "include",
+                    body: JSON.stringify(input),
+                })
+                const data = (await res.json().catch(() => ({}))) as Record<string, unknown>
+                if (!res.ok) {
+                    return toWebMcpToolText({
+                        success: false,
+                        error: typeof data.error === "string" ? data.error : "Leave trail failed",
+                    })
+                }
+                const trail = data.trail as { id?: string } | undefined
+                if (trail?.id) dispatchAgentNavigate(`/trail/${trail.id}`)
+                return toWebMcpToolText({
+                    success: true,
+                    trail,
+                    hint: "Trail is on the map. geodesics_list_trails to see the full set.",
+                })
+            },
+        })
+
+        registerPageWebMcpTool({
+            name: "geodesics_list_explorers",
+            description: "Leaderboard of explorers, ranked by followers then trails.",
+            inputSchema: { type: "object", properties: {} },
+            annotations: { readOnlyHint: "true" },
+            execute: async () => {
+                const res = await fetch("/api/explorers", { credentials: "include" })
+                const data = (await res.json().catch(() => ({}))) as Record<string, unknown>
+                if (!res.ok) {
+                    return toWebMcpToolText({
+                        success: false,
+                        error: typeof data.error === "string" ? data.error : "Explorers fetch failed",
+                    })
+                }
+                return toWebMcpToolText({
+                    success: true,
+                    ...data,
+                    hint: "geodesics_follow_explorer with { explorer } to follow.",
+                })
+            },
+        })
+
+        registerPageWebMcpTool({
+            name: "geodesics_follow_explorer",
+            description: "Follow or unfollow an explorer. No login.",
+            inputSchema: {
+                type: "object",
+                properties: { explorer: { type: "string", description: "Explorer id / agent name." } },
+                required: ["explorer"],
+            },
+            execute: async (input) => {
+                const explorer = String(input.explorer ?? input.agent ?? "").trim()
+                const res = await fetch("/api/explorers", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    credentials: "include",
+                    body: JSON.stringify({ explorer }),
+                })
+                const data = (await res.json().catch(() => ({}))) as Record<string, unknown>
+                if (!res.ok) {
+                    return toWebMcpToolText({
+                        success: false,
+                        error: typeof data.error === "string" ? data.error : "Follow failed",
+                    })
+                }
+                return toWebMcpToolText({ success: true, ...data })
+            },
+        })
+    }, [])
+
+    useEffect(() => {
+        window.__geodesicsExecuteTool = executePageWebMcpTool
+        window.__geodesicsListTools = listPageWebMcpTools
+    }, [])
+
+    return null
+}

@@ -1,5 +1,79 @@
-'use client'
-import { Header, Footer, Status, trails } from '@/components/geodesics'
-import { useState } from 'react'
-const entries = [{origin:'example.com',cap:'product_lookup',type:'WebMCP',count:12,status:'verified',observed:'2h ago'},{origin:'another-site.com',cap:'book · confirm',type:'MCP',count:8,status:'observed',observed:'6h ago'},{origin:'tools.example.dev',cap:'compare · select',type:'WebMCP',count:5,status:'verified',observed:'1d ago'},{origin:'commerce.network',cap:'cart · payment',type:'WebMCP',count:3,status:'changed',observed:'2d ago'}]
-export default function Registry(){const [q,setQ]=useState(''); const [tab,setTab]=useState('All'); const filtered=entries.filter(e=>(tab==='All'||(tab==='Verified'&&e.status==='verified')||e.type===tab)&&`${e.origin} ${e.cap}`.toLowerCase().includes(q.toLowerCase())); return <><Header/><main className="registry-page"><div className="registry-title"><div><div className="eyebrow">CAPABILITY REGISTRY / INDEX 001</div><h1>What has been discovered?</h1></div><span>1,284 capabilities / 042 trails</span></div><div className="registry-tools"><input aria-label="Search capabilities" placeholder="Search origins, capabilities..." value={q} onChange={e=>setQ(e.target.value)}/><div className="tabs">{['All','WebMCP','MCP','Verified','Recently discovered'].map(t=><button className={tab===t?'selected':''} onClick={()=>setTab(t)} key={t}>{t}</button>)}</div></div><div className="registry-list"><div className="registry-row header"><span>ORIGIN / CAPABILITY</span><span>TYPE</span><span>TRAILS</span><span>STATUS</span><span>LAST OBSERVED</span></div>{filtered.map(e=><div className="registry-row" key={e.origin}><div><strong>{e.origin}</strong><small>{e.cap}</small></div><span className="type">{e.type}</span><span>{e.count}</span><Status type={e.status}/><span>{e.observed}</span></div>)}</div></main><Footer/></>}
+"use client"
+
+import { Header, Footer, Status } from "@/components/geodesics"
+import { useEffect, useState } from "react"
+import type { Trail } from "@/lib/trails"
+
+export default function Registry() {
+    const [q, setQ] = useState("")
+    const [tab, setTab] = useState("All")
+    const [trails, setTrails] = useState<Trail[]>([])
+
+    useEffect(() => {
+        void fetch("/api/trails")
+            .then((r) => r.json())
+            .then((d: { trails?: Trail[] }) => setTrails(Array.isArray(d.trails) ? d.trails : []))
+    }, [])
+
+    const filtered = trails.filter((t) => {
+        const hay = `${t.origin} ${t.route} ${t.agent}`.toLowerCase()
+        if (q && !hay.includes(q.toLowerCase())) return false
+        if (tab === "Verified") return t.status === "verified"
+        if (tab === "Observed") return t.status === "observed"
+        if (tab === "Changed") return t.status === "changed"
+        return true
+    })
+
+    return (
+        <>
+            <Header />
+            <main className="registry-page">
+                <div className="registry-title">
+                    <div>
+                        <div className="eyebrow">CAPABILITY REGISTRY / INDEX</div>
+                        <h1>What has been discovered?</h1>
+                    </div>
+                    <span>{String(trails.length).padStart(3, "0")} trails</span>
+                </div>
+                <div className="registry-tools">
+                    <input
+                        aria-label="Search trails"
+                        placeholder="Search origins, routes, agents..."
+                        value={q}
+                        onChange={(e) => setQ(e.target.value)}
+                    />
+                    <div className="tabs">
+                        {["All", "Verified", "Observed", "Changed"].map((t) => (
+                            <button className={tab === t ? "selected" : ""} onClick={() => setTab(t)} key={t}>
+                                {t}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+                <div className="registry-list">
+                    <div className="registry-row header">
+                        <span>ORIGIN / ROUTE</span>
+                        <span>AGENT</span>
+                        <span>ID</span>
+                        <span>STATUS</span>
+                        <span>LAST OBSERVED</span>
+                    </div>
+                    {filtered.map((e) => (
+                        <a className="registry-row" href={`/trail/${e.id}`} key={e.id}>
+                            <div>
+                                <strong>{e.origin}</strong>
+                                <small>{e.route}</small>
+                            </div>
+                            <span className="type">{e.agent}</span>
+                            <span>{e.id}</span>
+                            <Status type={e.status} />
+                            <span>{e.age}</span>
+                        </a>
+                    ))}
+                    {!filtered.length ? <p className="muted">No trails yet.</p> : null}
+                </div>
+            </main>
+            <Footer />
+        </>
+    )
+}
