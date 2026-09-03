@@ -34,19 +34,9 @@ export async function seedTrailsIfEmpty() {
     /* no fake rows — trails come from agents */
 }
 
-let purgedSeed = false
-
 export async function listTrails(): Promise<Trail[]> {
     if (!hasDatabase()) return []
     try {
-        if (!purgedSeed) {
-            await sql()`
-                DELETE FROM trails
-                WHERE id IN ('040', '041', '042')
-                  AND origin IN ('example.com', 'another-site.com', 'tools.example.dev')
-            `
-            purgedSeed = true
-        }
         const rows = await sql()`
             SELECT id, agent, origin, route, status, goal, discovered_at
             FROM trails

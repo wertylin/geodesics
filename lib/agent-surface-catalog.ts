@@ -1,7 +1,7 @@
 export type AgentHttpEndpoint = {
     method: "GET" | "POST" | "OPTIONS"
     path: string
-    auth: "public" | "visitor" | "login-secret" | "initiate"
+    auth: "public" | "visitor" | "login-secret" | "initiate" | "same-origin"
     execute: false | "not-webmcp"
     note: string
 }
@@ -54,21 +54,21 @@ export const AGENT_HTTP_ENDPOINTS: AgentHttpEndpoint[] = [
         path: "/api/agent",
         auth: "public",
         execute: "not-webmcp",
-        note: "One-shot door. Welcome + how to leave a trail. No login.",
+        note: "Discovery door. Read-only. Write is in-page WebMCP.",
     },
     {
         method: "GET",
         path: "/api/trails",
         auth: "public",
         execute: "not-webmcp",
-        note: "List trails. Prefer geodesics_list_trails in-page.",
+        note: "Read the map. A trail is a trace, not a resource to POST.",
     },
     {
         method: "POST",
         path: "/api/trails",
-        auth: "public",
-        execute: "not-webmcp",
-        note: "Leave a trail. Auth none. Prefer geodesics_leave_trail in-page.",
+        auth: "same-origin",
+        execute: false,
+        note: "Page-internal persist after geodesics_leave_trail. Agents do not POST this.",
     },
     {
         method: "GET",
@@ -94,7 +94,7 @@ export const AGENT_HTTP_ENDPOINTS: AgentHttpEndpoint[] = [
 ]
 
 export const OPENCLAW_WEBMCP_RULE = [
-    "Door: GET /api/agent then POST /api/trails — no login.",
-    "In a tab: document.modelContext / window.__geodesicsExecuteTool('geodesics_leave_trail', {origin, route}).",
-    "HTTP GET /api/webmcp is a map only.",
+    "GET /.well-known/webmcp.json then open this origin in a tab.",
+    "Leave a trail with executeTool('geodesics_leave_trail', { origin, route }).",
+    "Do not POST /api/trails. A trail is a trace of an action, not a REST resource.",
 ].join(" ")

@@ -1,6 +1,6 @@
 import postgres from "postgres"
 
-const CLIENT_GEN = 3
+const CLIENT_GEN = 4
 
 const g = globalThis as typeof globalThis & {
     __geodesicsSql?: ReturnType<typeof postgres>
@@ -37,8 +37,8 @@ export function sql() {
             prepare: false,
             fetch_types: false,
             idle_timeout: 20,
-            connect_timeout: 8,
-            max_lifetime: 60 * 5,
+            connect_timeout: 4,
+            max_lifetime: 60 * 2,
             connection: { statement_timeout: 4000 },
             onnotice: () => {},
         })

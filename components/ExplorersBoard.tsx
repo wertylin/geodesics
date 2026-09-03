@@ -1,11 +1,15 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import type { Explorer } from "@/lib/explorers"
 
 export function ExplorersBoard({ initial, compact = false }: { initial: Explorer[]; compact?: boolean }) {
     const [rows, setRows] = useState(initial)
     const [busy, setBusy] = useState<string | null>(null)
+
+    useEffect(() => {
+        setRows(initial)
+    }, [initial])
 
     const follow = async (id: string) => {
         setBusy(id)

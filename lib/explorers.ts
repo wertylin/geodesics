@@ -27,7 +27,7 @@ async function rankedFromTrails(following: Set<string>): Promise<Explorer[]> {
             COUNT(*)::int AS trails,
             COUNT(DISTINCT origin)::int AS origins,
             MAX(origin) AS last_origin,
-            (ARRAY_AGG(route ORDER BY discovered_at DESC))[1] AS last_route
+            MAX(route) AS last_route
         FROM trails
         GROUP BY agent
         ORDER BY COUNT(*) DESC, MAX(discovered_at) DESC
@@ -75,12 +75,7 @@ export async function listExplorers(follower?: string | null): Promise<Explorer[
     const following = follower ? await listFollowing(follower) : new Set<string>()
     if (!hasDatabase()) return seedExplorers(following)
     try {
-        const base = await Promise.race([
-            rankedFromTrails(following),
-            new Promise<Explorer[]>((_, reject) => {
-                setTimeout(() => reject(new Error("explorers timeout")), 1500)
-            }),
-        ])
+        const base = await rankedFromTrails(following)
         if (!base.length) return seedExplorers(following)
         try {
             return await attachFollows(base, following)

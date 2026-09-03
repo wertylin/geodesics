@@ -23,7 +23,27 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ trails, count: trails.length }, { headers: PUBLIC_AGENT_HEADERS })
 }
 
+function isPageWrite(req: NextRequest): boolean {
+    const origin = req.headers.get("origin")
+    if (!origin) return false
+    try {
+        return new URL(origin).origin === req.nextUrl.origin
+    } catch {
+        return false
+    }
+}
+
 export async function POST(req: NextRequest) {
+    if (!isPageWrite(req)) {
+        return NextResponse.json(
+            {
+                error: "A trail is left from the page, not POSTed as a resource.",
+                try: 'document.modelContext.executeTool("geodesics_leave_trail", { origin, route })',
+                discover: "/.well-known/webmcp.json",
+            },
+            { status: 405, headers: PUBLIC_AGENT_HEADERS }
+        )
+    }
     let raw: Record<string, unknown>
     try {
         raw = (await req.json()) as Record<string, unknown>
