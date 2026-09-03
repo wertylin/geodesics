@@ -10,6 +10,7 @@ type Node = {
     key: string
     label: string
     href?: string
+    trailIds: string[]
     v: V3
 }
 
@@ -17,6 +18,7 @@ type Arc = {
     a: V3
     b: V3
     seed: number
+    trailId: string
 }
 
 const LAND: [number, number][][] = [
@@ -214,28 +216,56 @@ function project(v: V3, cx: number, cy: number, r: number) {
     return { x: cx + v[0] * r * p, y: cy - v[1] * r * p, z: v[2], p }
 }
 
+function trailSteps(t: Trail) {
+    return [hostOf(t.origin), ...hops(t.route)]
+}
+
 function buildGraph(trails: Trail[]) {
     const nodes = new Map<string, Node>()
     const arcs: Arc[] = []
-    const put = (key: string, label: string, href?: string) => {
+    const put = (key: string, label: string, trailId: string, href?: string) => {
         const prev = nodes.get(key)
         if (prev) {
             if (href && !prev.href) prev.href = href
+            if (!prev.trailIds.includes(trailId)) prev.trailIds.push(trailId)
             return prev
         }
-        const n: Node = { key, label, href, v: keyToV(key) }
+        const n: Node = { key, label, href, trailIds: [trailId], v: keyToV(key) }
         nodes.set(key, n)
         return n
     }
     for (const t of trails) {
         const href = t.id.startsWith("seed-") ? undefined : `/trail/${t.id}`
-        const steps = [hostOf(t.origin), ...hops(t.route)]
-        const pts: Node[] = steps.map((s, i) => put(i === 0 ? `o:${s}` : `h:${s}`, s, href))
+        const steps = trailSteps(t)
+        const pts: Node[] = steps.map((s, i) => put(i === 0 ? `o:${s}` : `h:${s}`, s, t.id, href))
         for (let i = 1; i < pts.length; i++) {
-            arcs.push({ a: pts[i - 1].v, b: pts[i].v, seed: hash32(t.id + i) })
+            arcs.push({ a: pts[i - 1].v, b: pts[i].v, seed: hash32(t.id + i), trailId: t.id })
         }
     }
     return { nodes: [...nodes.values()], arcs }
+}
+
+function aimAt(v: V3) {
+    const yaw = Math.atan2(v[0], v[2])
+    const z1 = v[0] * Math.sin(yaw) + v[2] * Math.cos(yaw)
+    const pitch = Math.min(1.1, Math.max(-1.1, Math.atan2(v[1], z1)))
+    return { yaw, pitch }
+}
+
+function trailAim(trails: Trail[], id: string) {
+    const t = trails.find((row) => row.id === id)
+    if (!t) return null
+    const steps = trailSteps(t)
+    const mid = steps[Math.floor((steps.length - 1) / 2)] ?? steps[0]
+    const i = steps.indexOf(mid)
+    return aimAt(keyToV(i === 0 ? `o:${mid}` : `h:${mid}`))
+}
+
+function lerpAngle(a: number, b: number, t: number) {
+    let d = b - a
+    while (d > Math.PI) d -= Math.PI * 2
+    while (d < -Math.PI) d += Math.PI * 2
+    return a + d * t
 }
 
 function strokeChain(
@@ -264,9 +294,15 @@ function strokeChain(
 export function GeodesicGlobe({
     trails,
     compact = false,
+    focusId = null,
+    focusNonce = 0,
+    onSelect,
 }: {
     trails: Trail[]
     compact?: boolean
+    focusId?: string | null
+    focusNonce?: number
+    onSelect?: (id: string) => void
 }) {
     const router = useRouter()
     const wrapRef = useRef<HTMLDivElement>(null)
@@ -275,17 +311,35 @@ export function GeodesicGlobe({
     const pitch = useRef(0.28)
     const drag = useRef<{ x: number; y: number; moved: boolean } | null>(null)
     const hoverKey = useRef<string | null>(null)
+    const focusRef = useRef(focusId)
+    const onSelectRef = useRef(onSelect)
+    const aimRef = useRef<{ yaw: number; pitch: number } | null>(null)
     const [tip, setTip] = useState<{ label: string; x: number; y: number } | null>(null)
     const reduce = useRef(false)
+    focusRef.current = focusId
+    onSelectRef.current = onSelect
 
-    const trailKey = trails
-        .slice(0, 18)
-        .map((t) => `${t.id}:${t.route}`)
-        .join("|")
+    const shown = useMemo(() => {
+        const rows = trails.slice(0, 18)
+        if (focusId && !rows.some((t) => t.id === focusId)) {
+            const extra = trails.find((t) => t.id === focusId)
+            if (extra) rows.push(extra)
+        }
+        return rows
+    }, [trails, focusId])
+    const trailKey = shown.map((t) => `${t.id}:${t.route}`).join("|")
     const liveCount = trails.length
-    const graph = useMemo(() => buildGraph(trailKey ? trails.slice(0, 18) : SEED), [trailKey, trails])
+    const graph = useMemo(() => buildGraph(trailKey ? shown : SEED), [trailKey, shown])
     const graphRef = useRef(graph)
     graphRef.current = graph
+
+    useEffect(() => {
+        if (!focusId) {
+            aimRef.current = null
+            return
+        }
+        aimRef.current = trailAim(shown, focusId)
+    }, [focusId, focusNonce, shown])
 
     useEffect(() => {
         reduce.current = window.matchMedia("(prefers-reduced-motion: reduce)").matches
@@ -341,7 +395,21 @@ export function GeodesicGlobe({
             }
             const dt = Math.min(0.05, (now - last) / 1000)
             last = now
-            if (!drag.current && !reduce.current) yaw.current += dt * 0.18
+            const aim = aimRef.current
+            if (drag.current) {
+                aimRef.current = null
+            } else if (aim) {
+                yaw.current = lerpAngle(yaw.current, aim.yaw, Math.min(1, dt * 3.4))
+                pitch.current += (aim.pitch - pitch.current) * Math.min(1, dt * 3.4)
+                let dy = aim.yaw - yaw.current
+                while (dy > Math.PI) dy -= Math.PI * 2
+                while (dy < -Math.PI) dy += Math.PI * 2
+                if (Math.abs(dy) < 0.02 && Math.abs(aim.pitch - pitch.current) < 0.02) aimRef.current = null
+            } else if (!reduce.current && !focusRef.current) {
+                yaw.current += dt * 0.18
+            } else if (!reduce.current) {
+                yaw.current += dt * 0.05
+            }
 
             const w = wrap.clientWidth
             const h = wrap.clientHeight
@@ -389,11 +457,13 @@ export function GeodesicGlobe({
                 })
             }
             const { nodes, arcs } = graphRef.current
+            const fid = focusRef.current
+            const isHot = (id: string) => !fid || id === fid
             for (const arc of arcs) {
                 const pts = []
                 for (let i = 0; i <= 28; i++) pts.push(xf(slerp(arc.a, arc.b, i / 28)))
                 strokeChain(ctx, pts, false, (c) => {
-                    c.strokeStyle = "rgba(198,243,107,0.12)"
+                    c.strokeStyle = isHot(arc.trailId) ? "rgba(198,243,107,0.16)" : "rgba(198,243,107,0.04)"
                     c.lineWidth = 1.1
                 })
             }
@@ -419,24 +489,35 @@ export function GeodesicGlobe({
             ctx.setLineDash([5, 7])
             ctx.lineDashOffset = -now / 90
             for (const arc of arcs) {
+                if (!isHot(arc.trailId)) continue
                 const pts = []
                 for (let i = 0; i <= 32; i++) pts.push(xf(slerp(arc.a, arc.b, i / 32)))
                 strokeChain(ctx, pts, true, (c) => {
-                    c.strokeStyle = "rgba(198,243,107,0.85)"
-                    c.lineWidth = 1.6
-                    c.shadowColor = "rgba(198,243,107,0.45)"
-                    c.shadowBlur = 8
+                    c.strokeStyle = "rgba(198,243,107,0.9)"
+                    c.lineWidth = 1.85
+                    c.shadowColor = "rgba(198,243,107,0.5)"
+                    c.shadowBlur = 10
                 })
             }
-            ctx.shadowBlur = 0
             ctx.setLineDash([])
+            ctx.shadowBlur = 0
+            for (const arc of arcs) {
+                if (isHot(arc.trailId)) continue
+                const pts = []
+                for (let i = 0; i <= 24; i++) pts.push(xf(slerp(arc.a, arc.b, i / 24)))
+                strokeChain(ctx, pts, true, (c) => {
+                    c.strokeStyle = "rgba(198,243,107,0.18)"
+                    c.lineWidth = 1
+                })
+            }
 
             for (const arc of arcs) {
+                if (!isHot(arc.trailId)) continue
                 const t = (now / 2800 + (arc.seed % 1000) / 1000) % 1
                 const p = xf(slerp(arc.a, arc.b, t))
                 if (p.z < 0.02) continue
                 ctx.beginPath()
-                ctx.arc(p.x, p.y, 2.4, 0, Math.PI * 2)
+                ctx.arc(p.x, p.y, 2.6, 0, Math.PI * 2)
                 ctx.fillStyle = "#c6f36b"
                 ctx.fill()
             }
@@ -446,13 +527,14 @@ export function GeodesicGlobe({
                 const p = xf(node.v)
                 if (p.z < -0.05) continue
                 nodesHit.push({ node, x: p.x, y: p.y, z: p.z })
+                const onTrail = node.trailIds.some(isHot)
                 const hot = hoverKey.current === node.key
                 ctx.beginPath()
-                ctx.arc(p.x, p.y, hot ? 5 : 3.2, 0, Math.PI * 2)
-                ctx.fillStyle = hot ? "#c6f36b" : "#0a0c0b"
+                ctx.arc(p.x, p.y, hot ? 5.4 : onTrail ? 3.6 : 2.2, 0, Math.PI * 2)
+                ctx.fillStyle = hot || onTrail ? "#c6f36b" : "#0a0c0b"
                 ctx.fill()
-                ctx.strokeStyle = "#c6f36b"
-                ctx.lineWidth = 1.3
+                ctx.strokeStyle = onTrail ? "#c6f36b" : "rgba(198,243,107,0.35)"
+                ctx.lineWidth = onTrail ? 1.4 : 1
                 ctx.stroke()
             }
             ctx.restore()
@@ -518,7 +600,12 @@ export function GeodesicGlobe({
             if (d?.moved) return
             const rect = canvas.getBoundingClientRect()
             const hit = pick(e.clientX - rect.left, e.clientY - rect.top)
-            if (hit?.node.href) router.push(hit.node.href)
+            const ids = hit?.node.trailIds.filter((id) => !id.startsWith("seed-")) ?? []
+            if (onSelectRef.current && ids.length) {
+                onSelectRef.current(ids.find((id) => id !== focusRef.current) ?? ids[0])
+            } else if (hit?.node.href) {
+                router.push(hit.node.href)
+            }
         }
         const onLeave = () => {
             hoverKey.current = null

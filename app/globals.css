@@ -50,4 +50,12 @@
 .globe-hud strong{display:block;color:var(--lime);font:400 18px 'Space Grotesk';letter-spacing:.02em;margin-top:4px}
 .map-canvas.globe-stage{background:#090c0a;padding:0;overflow:hidden}
 .map-canvas.globe-stage .globe-figure{height:100%;flex:none}
+.map-explorer .map-canvas.globe-stage{min-height:650px}
+.node-panel .eyebrow{display:flex;justify-content:space-between;gap:12px;align-items:baseline}
+.trail-index{color:var(--lime);letter-spacing:.08em}
+.trail-hops{list-style:none;margin:18px 0 0;padding:0;border-top:1px solid var(--line)}
+.trail-hops li{display:flex;gap:12px;align-items:baseline;padding:10px 0;border-bottom:1px solid var(--line);font:12px 'DM Mono';overflow-wrap:anywhere}
+.trail-hops b{color:var(--lime);font-weight:400;flex-shrink:0}
+.trail-actions{display:grid;grid-template-columns:1fr 1.4fr 1fr;gap:8px;margin-top:20px}
+.trail-actions .lime-button,.trail-actions .outline-button{width:100%;margin-top:0;padding:12px 10px;gap:8px;justify-content:center}
 .hero .jury-beam{left:42%;bottom:24px}

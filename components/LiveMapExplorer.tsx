@@ -1,11 +1,13 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { MapCanvas } from "@/components/geodesics"
+import { GeodesicGlobe } from "@/components/GeodesicGlobe"
 import type { Trail } from "@/lib/trails"
 
 export function LiveMapExplorer() {
     const [trails, setTrails] = useState<Trail[]>([])
+    const [selectedId, setSelectedId] = useState<string | null>(null)
+    const [focusNonce, setFocusNonce] = useState(0)
 
     useEffect(() => {
         const ac = new AbortController()
@@ -16,7 +18,23 @@ export function LiveMapExplorer() {
         return () => ac.abort()
     }, [])
 
-    const latest = trails[0]
+    const idx = Math.max(0, trails.findIndex((t) => t.id === selectedId))
+    const selected = trails[selectedId ? idx : 0]
+    const hops = selected
+        ? [selected.origin.replace(/^https?:\/\//, "").split("/")[0] || selected.origin, ...splitHops(selected.route)]
+        : []
+
+    const pick = (id: string) => {
+        setSelectedId(id)
+        setFocusNonce((n) => n + 1)
+    }
+    const step = (dir: number) => {
+        if (!trails.length) return
+        const i = selected ? trails.findIndex((t) => t.id === selected.id) : 0
+        const next = trails[(i + dir + trails.length) % trails.length]
+        pick(next.id)
+    }
+
     return (
         <>
             <div className="map-page-head">
@@ -29,20 +47,53 @@ export function LiveMapExplorer() {
                 </div>
             </div>
             <div className="map-explorer">
-                <MapCanvas trails={trails} />
+                <div className="map-canvas globe-stage">
+                    <GeodesicGlobe
+                        trails={trails}
+                        focusId={selected?.id ?? null}
+                        focusNonce={focusNonce}
+                        onSelect={pick}
+                    />
+                </div>
                 <aside className="node-panel">
-                    {latest ? (
+                    {selected ? (
                         <>
-                            <div className="eyebrow">LATEST TRAIL / {latest.id}</div>
-                            <h2>{latest.agent}</h2>
-                            <StatusLine label="ORIGIN" value={latest.origin} />
-                            <StatusLine label="ROUTE" value={latest.route} />
-                            <StatusLine label="GOAL" value={latest.goal || "—"} />
-                            <StatusLine label="STATUS" value={latest.status} good={latest.status === "verified"} />
-                            <StatusLine label="DISCOVERED" value={latest.age} />
-                            <a className="lime-button" href={`/trail/${latest.id}`}>
-                                View trail <span>→</span>
-                            </a>
+                            <div className="eyebrow">
+                                TRAIL / {selected.id}
+                                <span className="trail-index">
+                                    {String(trails.findIndex((t) => t.id === selected.id) + 1).padStart(2, "0")} /{" "}
+                                    {String(trails.length).padStart(2, "0")}
+                                </span>
+                            </div>
+                            <h2>{selected.agent}</h2>
+                            <StatusLine label="ORIGIN" value={selected.origin} />
+                            <StatusLine label="ROUTE" value={selected.route} />
+                            <StatusLine label="GOAL" value={selected.goal || "—"} />
+                            <StatusLine label="STATUS" value={selected.status} good={selected.status === "verified"} />
+                            <StatusLine label="DISCOVERED" value={selected.age} />
+                            <ol className="trail-hops">
+                                {hops.map((hop, i) => (
+                                    <li key={`${hop}-${i}`}>
+                                        <b>{String(i + 1).padStart(2, "0")}</b>
+                                        {hop}
+                                    </li>
+                                ))}
+                            </ol>
+                            <div className="trail-actions">
+                                <button type="button" className="outline-button" onClick={() => step(-1)} disabled={trails.length < 2}>
+                                    Prev
+                                </button>
+                                <button
+                                    type="button"
+                                    className="lime-button"
+                                    onClick={() => pick(selected.id)}
+                                >
+                                    View trail <span>→</span>
+                                </button>
+                                <button type="button" className="outline-button" onClick={() => step(1)} disabled={trails.length < 2}>
+                                    Next
+                                </button>
+                            </div>
                         </>
                     ) : (
                         <>
@@ -55,6 +106,13 @@ export function LiveMapExplorer() {
             </div>
         </>
     )
+}
+
+function splitHops(route: string) {
+    return route
+        .split(/\s*→\s*|\s*>\s*|\s*;\s*|\s*,\s*/)
+        .map((s) => s.trim())
+        .filter(Boolean)
 }
 
 function StatusLine({

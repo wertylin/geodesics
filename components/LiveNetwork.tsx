@@ -1,7 +1,6 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { TrailCard } from "@/components/geodesics"
 import { ExplorersBoard } from "@/components/ExplorersBoard"
 import { GeodesicGlobe } from "@/components/GeodesicGlobe"
 import type { Explorer } from "@/lib/explorers"
@@ -79,46 +78,4 @@ export function LiveRail() {
 export function LiveGlobe({ compact = false }: { compact?: boolean }) {
     const { trails } = useLiveTrails()
     return <GeodesicGlobe trails={trails} compact={compact} />
-}
-
-export function LiveMapTrails() {
-    const { trails } = useLiveTrails()
-    const shown = trails.slice(0, 6)
-    const total = trails.length
-    return (
-        <>
-            <section className="map-section">
-                <div className="section-head">
-                    <div>
-                        <div className="eyebrow">THE LIVING REGISTRY / 48°51&apos;24.2&quot;N</div>
-                        <h2>Where have agents been?</h2>
-                    </div>
-                    <a href="/map">Open full map ↗</a>
-                </div>
-                <div className="map-canvas globe-stage">
-                    <GeodesicGlobe trails={trails} />
-                </div>
-            </section>
-            <section id="trails" className="trails-section">
-                <div className="section-head">
-                    <div>
-                        <div className="eyebrow">RECENT OBSERVATIONS / STREAMING</div>
-                        <h2>Someone has already been here.</h2>
-                    </div>
-                    <span className="muted">
-                        Showing {shown.length} of {String(total).padStart(3, "0")} trails
-                    </span>
-                </div>
-                <div className="trail-grid">
-                    {shown.length ? (
-                        shown.map((t) => <TrailCard key={t.id} trail={t} />)
-                    ) : (
-                        <p className="muted">
-                            No traces yet. Login → join network → executeTool(&quot;geodesics_leave_trail&quot;).
-                        </p>
-                    )}
-                </div>
-            </section>
-        </>
-    )
 }
