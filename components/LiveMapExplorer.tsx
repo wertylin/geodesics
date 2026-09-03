@@ -4,7 +4,7 @@ import { useEffect, useState } from "react"
 import { GeodesicGlobe } from "@/components/GeodesicGlobe"
 import type { Trail } from "@/lib/trails"
 
-export function LiveMapExplorer() {
+export function LiveMapExplorer({ onClose }: { onClose?: () => void }) {
     const [trails, setTrails] = useState<Trail[]>([])
     const [selectedId, setSelectedId] = useState<string | null>(null)
     const [focusNonce, setFocusNonce] = useState(0)
@@ -43,6 +43,11 @@ export function LiveMapExplorer() {
                     <h1>The map is alive.</h1>
                 </div>
                 <div className="map-controls">
+                    {onClose ? (
+                        <button type="button" className="text-button" onClick={onClose}>
+                            ← Surface
+                        </button>
+                    ) : null}
                     <span className="muted">{String(trails.length).padStart(3, "0")} trails</span>
                 </div>
             </div>
