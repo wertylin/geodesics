@@ -6,36 +6,90 @@ import { ExplorersBoard } from "@/components/ExplorersBoard"
 import type { Explorer } from "@/lib/explorers"
 import type { Trail } from "@/lib/trails"
 
+let trailsOnce: Promise<Trail[]> | null = null
+
+function loadTrails(): Promise<Trail[]> {
+    if (!trailsOnce) {
+        const ac = new AbortController()
+        const timer = setTimeout(() => ac.abort(), 5000)
+        trailsOnce = fetch("/api/trails", { signal: ac.signal })
+            .then((r) => r.json())
+            .then((d: { trails?: Trail[] }) => (Array.isArray(d.trails) ? d.trails : []))
+            .catch(() => [] as Trail[])
+            .finally(() => {
+                clearTimeout(timer)
+                setTimeout(() => {
+                    trailsOnce = null
+                }, 2000)
+            })
+    }
+    return trailsOnce
+}
+
+function rankExplorers(trails: Trail[]): Explorer[] {
+    const acc = new Map<string, { trails: number; origins: Set<string>; last_origin: string; last_route: string }>()
+    for (const t of trails) {
+        const cur = acc.get(t.agent)
+        if (!cur) {
+            acc.set(t.agent, {
+                trails: 1,
+                origins: new Set([t.origin]),
+                last_origin: t.origin,
+                last_route: t.route,
+            })
+            continue
+        }
+        cur.trails += 1
+        cur.origins.add(t.origin)
+    }
+    return [...acc.entries()]
+        .map(([id, v]) => ({
+            id,
+            trails: v.trails,
+            origins: v.origins.size,
+            follows: 0,
+            last_origin: v.last_origin,
+            last_route: v.last_route,
+            following: false,
+        }))
+        .sort((a, b) => b.trails - a.trails)
+        .slice(0, 5)
+}
+
 function useLiveTrails() {
     const [trails, setTrails] = useState<Trail[]>([])
-    const [explorers, setExplorers] = useState<Explorer[]>([])
+    const [ready, setReady] = useState(false)
 
     useEffect(() => {
-        const ac = new AbortController()
-        void Promise.all([
-            fetch("/api/trails", { signal: ac.signal }).then((r) => r.json()),
-            fetch("/api/explorers", { credentials: "include", signal: ac.signal }).then((r) => r.json()),
-        ])
-            .then(([trailData, explorerData]: [{ trails?: Trail[] }, { explorers?: Explorer[] }]) => {
-                setTrails(Array.isArray(trailData.trails) ? trailData.trails : [])
-                setExplorers(Array.isArray(explorerData.explorers) ? explorerData.explorers : [])
-            })
-            .catch(() => {})
-        return () => ac.abort()
+        let on = true
+        void loadTrails().then((rows) => {
+            if (!on) return
+            setTrails(rows)
+            setReady(true)
+        })
+        return () => {
+            on = false
+        }
     }, [])
 
-    return { trails, explorers }
+    return { trails, explorers: rankExplorers(trails), ready }
 }
 
 export function LiveRail() {
-    const { trails, explorers } = useLiveTrails()
+    const { trails, explorers, ready } = useLiveTrails()
     return (
         <aside id="explorers" className="hero-aside explorers-rail">
             <div className="explorers-rail-head">
-                <span>EXPLORERS</span>
+                <span>TOP EXPLORERS</span>
                 <small>{String(trails.length).padStart(3, "0")} trails</small>
             </div>
-            <ExplorersBoard initial={explorers} compact />
+            {!ready ? (
+                <p className="muted">ranking live traces…</p>
+            ) : explorers.length ? (
+                <ExplorersBoard initial={explorers} compact />
+            ) : (
+                <p className="muted">no traces yet</p>
+            )}
             <span className="pulse-label">
                 <i /> WebMCP entry live
             </span>

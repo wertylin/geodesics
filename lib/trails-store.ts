@@ -1,5 +1,5 @@
 import { formatTrailAge, type Trail, type TrailStatus } from "@/lib/trails"
-import { hasDatabase, sql } from "@/lib/db"
+import { hasDatabase, sql, timed } from "@/lib/db"
 
 function withAge(trail: Trail): Trail {
     return { ...trail, age: formatTrailAge(trail.discovered_at) }
@@ -37,11 +37,14 @@ export async function seedTrailsIfEmpty() {
 export async function listTrails(): Promise<Trail[]> {
     if (!hasDatabase()) return []
     try {
-        const rows = await sql()`
-            SELECT id, agent, origin, route, status, goal, discovered_at
-            FROM trails
-            ORDER BY discovered_at DESC
-        `
+        const rows = await timed(
+            (q) => q`
+                SELECT id, agent, origin, route, status, goal, discovered_at
+                FROM trails
+                ORDER BY discovered_at DESC
+            `,
+            2500
+        )
         return rows.map(rowToTrail)
     } catch {
         return []

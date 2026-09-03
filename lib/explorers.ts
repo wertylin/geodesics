@@ -1,4 +1,4 @@
-import { hasDatabase, sql } from "@/lib/db"
+import { hasDatabase, sql, timed } from "@/lib/db"
 
 export const FOLLOWER_COOKIE = "geodesics_follower"
 
@@ -12,78 +12,47 @@ export type Explorer = {
     following: boolean
 }
 
-function seedExplorers(_following: Set<string>): Explorer[] {
-    return []
-}
-
 export function normalizeExplorerId(raw: string): string {
     return raw.trim().toLowerCase().replace(/[^a-z0-9._-]+/g, "").slice(0, 64)
 }
 
-async function rankedFromTrails(following: Set<string>): Promise<Explorer[]> {
-    const rows = await sql()`
-        SELECT
-            agent AS id,
-            COUNT(*)::int AS trails,
-            COUNT(DISTINCT origin)::int AS origins,
-            MAX(origin) AS last_origin,
-            MAX(route) AS last_route
-        FROM trails
-        GROUP BY agent
-        ORDER BY COUNT(*) DESC, MAX(discovered_at) DESC
-        LIMIT 16
-    `
-    return rows.map((row) => ({
-        id: String(row.id),
-        trails: Number(row.trails) || 0,
-        origins: Number(row.origins) || 0,
-        follows: 0,
-        last_origin: String(row.last_origin ?? ""),
-        last_route: String(row.last_route ?? ""),
-        following: following.has(String(row.id)),
-    }))
-}
-
-async function attachFollows(explorers: Explorer[], following: Set<string>): Promise<Explorer[]> {
-    if (!explorers.length) return explorers
-    const rows = await sql()`
-        SELECT explorer, COUNT(*)::int AS n
-        FROM explorer_follows
-        GROUP BY explorer
-    `
-    const counts = new Map(rows.map((r) => [String(r.explorer), Number(r.n) || 0]))
-    return explorers
-        .map((e) => ({
-            ...e,
-            follows: counts.get(e.id) ?? 0,
-            following: following.has(e.id),
-        }))
-        .sort((a, b) => b.follows - a.follows || b.trails - a.trails)
-}
-
-export async function listFollowing(follower: string): Promise<Set<string>> {
-    if (!follower || !hasDatabase()) return new Set()
-    try {
-        const rows = await sql()`SELECT explorer FROM explorer_follows WHERE follower = ${follower}`
-        return new Set(rows.map((r) => String(r.explorer)))
-    } catch {
-        return new Set()
-    }
-}
-
 export async function listExplorers(follower?: string | null): Promise<Explorer[]> {
-    const following = follower ? await listFollowing(follower) : new Set<string>()
-    if (!hasDatabase()) return seedExplorers(following)
+    if (!hasDatabase()) return []
     try {
-        const base = await rankedFromTrails(following)
-        if (!base.length) return seedExplorers(following)
-        try {
-            return await attachFollows(base, following)
-        } catch {
-            return base
-        }
+        return await timed(async (q) => {
+            const rows = await q`
+                SELECT
+                    agent AS id,
+                    COUNT(*)::int AS trails,
+                    COUNT(DISTINCT origin)::int AS origins,
+                    MAX(origin) AS last_origin,
+                    MAX(route) AS last_route
+                FROM trails
+                GROUP BY agent
+                ORDER BY COUNT(*) DESC, MAX(discovered_at) DESC
+                LIMIT 16
+            `
+            const following = new Set<string>()
+            if (follower) {
+                try {
+                    const f = await q`SELECT explorer FROM explorer_follows WHERE follower = ${follower}`
+                    for (const row of f) following.add(String(row.explorer))
+                } catch {
+                    /* table may not exist yet */
+                }
+            }
+            return rows.map((row) => ({
+                id: String(row.id),
+                trails: Number(row.trails) || 0,
+                origins: Number(row.origins) || 0,
+                follows: 0,
+                last_origin: String(row.last_origin ?? ""),
+                last_route: String(row.last_route ?? ""),
+                following: following.has(String(row.id)),
+            }))
+        }, 2500)
     } catch {
-        return seedExplorers(following)
+        return []
     }
 }
 

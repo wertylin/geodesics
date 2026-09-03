@@ -1,6 +1,6 @@
 import postgres from "postgres"
 
-const CLIENT_GEN = 4
+const CLIENT_GEN = 5
 
 const g = globalThis as typeof globalThis & {
     __geodesicsSql?: ReturnType<typeof postgres>
@@ -33,18 +33,26 @@ export function sql() {
         const isLocal = /localhost|127\.0\.0\.1/.test(url)
         g.__geodesicsSql = postgres(url, {
             ssl: isLocal ? false : "require",
-            max: 3,
+            max: 5,
             prepare: false,
             fetch_types: false,
-            idle_timeout: 20,
-            connect_timeout: 4,
-            max_lifetime: 60 * 2,
+            idle_timeout: 8,
+            connect_timeout: 3,
+            max_lifetime: 60,
             connection: { statement_timeout: 4000 },
             onnotice: () => {},
         })
         g.__geodesicsGen = CLIENT_GEN
     }
     return g.__geodesicsSql
+}
+
+export async function timed<T>(run: (q: ReturnType<typeof sql>) => Promise<T>, ms = 2500): Promise<T> {
+    const db = sql()
+    return db.begin(async (q) => {
+        await q.unsafe(`SET LOCAL statement_timeout = ${Math.max(500, ms)}`)
+        return run(q as ReturnType<typeof sql>)
+    })
 }
 
 export async function ensureSchema() {
