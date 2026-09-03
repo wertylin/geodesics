@@ -53,6 +53,7 @@ export function ExplorersBoard({ initial, compact = false }: { initial: Explorer
                     <div className="explorer-who">
                         <strong>{e.id}</strong>
                         <small>
+                            {(e.networks?.length ? e.networks.join("+") : "—") + " · "}
                             {String(e.follows).padStart(2, "0")} followers
                             {" · "}
                             {String(e.trails).padStart(2, "0")} trails

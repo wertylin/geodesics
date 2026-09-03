@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from "next/server"
-import { readVisitorFromRequest } from "@/lib/agent-access"
+import { requireVisitor } from "@/lib/agent-access"
 import { getTrail, leaveTrail, listTrails } from "@/lib/trails-store"
-import type { TrailStatus } from "@/lib/trails"
 import { parseLeaveTrailBody, PUBLIC_AGENT_HEADERS } from "@/lib/agent-welcome"
+import {
+    assertLeaveRate,
+    networksForPrincipal,
+    principalInAnyNetwork,
+    verifyWriteNonce,
+} from "@/lib/trust-network"
 
 export const dynamic = "force-dynamic"
-
-const STATUSES = new Set<TrailStatus>(["verified", "observed", "changed"])
 
 export function OPTIONS() {
     return new NextResponse(null, { status: 204, headers: PUBLIC_AGENT_HEADERS })
@@ -40,10 +43,35 @@ export async function POST(req: NextRequest) {
                 error: "A trail is left from the page, not POSTed as a resource.",
                 try: 'document.modelContext.executeTool("geodesics_leave_trail", { origin, route })',
                 discover: "/.well-known/webmcp.json",
+                also: "Login + join a trust network first.",
             },
             { status: 405, headers: PUBLIC_AGENT_HEADERS }
         )
     }
+
+    const gate = requireVisitor(req)
+    if (gate instanceof NextResponse) {
+        return NextResponse.json(
+            {
+                error: "Unauthorized. Call geodesics_agent_login, then join a trust network.",
+                try: 'executeTool("geodesics_agent_login", { identifier, secret })',
+            },
+            { status: 401, headers: PUBLIC_AGENT_HEADERS }
+        )
+    }
+
+    const principal = gate.visitor.identifier
+    if (!(await principalInAnyNetwork(principal))) {
+        return NextResponse.json(
+            {
+                error: "Not in a trust network. Join with your invite key.",
+                try: 'executeTool("geodesics_join_network", { network: "jury", key })',
+                networks: await networksForPrincipal(principal),
+            },
+            { status: 403, headers: PUBLIC_AGENT_HEADERS }
+        )
+    }
+
     let raw: Record<string, unknown>
     try {
         raw = (await req.json()) as Record<string, unknown>
@@ -51,21 +79,31 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "Invalid JSON" }, { status: 400, headers: PUBLIC_AGENT_HEADERS })
     }
 
+    const writeNonce = typeof raw.write_nonce === "string" ? raw.write_nonce : ""
+    if (!writeNonce || !verifyWriteNonce(writeNonce, principal)) {
+        return NextResponse.json(
+            {
+                error: "Missing or expired write_nonce. GET /api/write-nonce first (same tab session).",
+            },
+            { status: 403, headers: PUBLIC_AGENT_HEADERS }
+        )
+    }
+
     const parsed = parseLeaveTrailBody(raw)
-    const visitor = readVisitorFromRequest(req)
-    const status = parsed.status && STATUSES.has(parsed.status as TrailStatus)
-        ? (parsed.status as TrailStatus)
-        : undefined
 
     try {
+        assertLeaveRate(principal)
         const trail = await leaveTrail({
-            agent: visitor?.identifier || parsed.agent,
+            agent: principal,
             origin: parsed.origin,
             route: parsed.route,
             goal: parsed.goal,
-            status,
+            status: "observed",
         })
-        return NextResponse.json({ success: true, trail }, { headers: PUBLIC_AGENT_HEADERS })
+        return NextResponse.json(
+            { success: true, trail, networks: await networksForPrincipal(principal) },
+            { headers: PUBLIC_AGENT_HEADERS }
+        )
     } catch (error) {
         const statusCode = typeof error === "object" && error && "status" in error ? Number(error.status) : 500
         return NextResponse.json(

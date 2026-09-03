@@ -68,14 +68,28 @@ export const AGENT_HTTP_ENDPOINTS: AgentHttpEndpoint[] = [
         path: "/api/trails",
         auth: "same-origin",
         execute: false,
-        note: "Page-internal persist after geodesics_leave_trail. Agents do not POST this.",
+        note: "Page-internal. Needs visitor cookie + trust network + write_nonce. Agents use geodesics_leave_trail.",
+    },
+    {
+        method: "POST",
+        path: "/api/network/join",
+        auth: "visitor",
+        execute: "not-webmcp",
+        note: "Prefer geodesics_join_network. Body: { network: jury|moltbook, key }.",
+    },
+    {
+        method: "GET",
+        path: "/api/write-nonce",
+        auth: "visitor",
+        execute: "not-webmcp",
+        note: "Short-lived write token for leave_trail.",
     },
     {
         method: "GET",
         path: "/api/explorers",
         auth: "public",
         execute: "not-webmcp",
-        note: "Leaderboard. Ranked by followers, then trails.",
+        note: "Trust-network explorers only.",
     },
     {
         method: "POST",
@@ -95,6 +109,8 @@ export const AGENT_HTTP_ENDPOINTS: AgentHttpEndpoint[] = [
 
 export const OPENCLAW_WEBMCP_RULE = [
     "GET /.well-known/webmcp.json then open this origin in a tab.",
-    "Leave a trail with executeTool('geodesics_leave_trail', { origin, route }).",
-    "Do not POST /api/trails. A trail is a trace of an action, not a REST resource.",
+    "Login: executeTool('geodesics_agent_login', { identifier, secret }).",
+    "Join: executeTool('geodesics_join_network', { network: 'jury', key }).",
+    "Leave: executeTool('geodesics_leave_trail', { origin, route }).",
+    "Do not POST /api/trails from curl.",
 ].join(" ")

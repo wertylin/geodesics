@@ -111,6 +111,15 @@ export async function ensureSchema() {
                     PRIMARY KEY (explorer, follower)
                 )
             `
+            await db`
+                CREATE TABLE IF NOT EXISTS network_members (
+                    network TEXT NOT NULL,
+                    principal TEXT NOT NULL,
+                    kind TEXT NOT NULL DEFAULT 'agent',
+                    joined_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    PRIMARY KEY (network, principal)
+                )
+            `
         })().catch((err) => {
             g.__geodesicsSchema = undefined
             throw err

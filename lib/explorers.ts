@@ -1,4 +1,5 @@
 import { hasDatabase, sql, timed } from "@/lib/db"
+import { networkedAgentIds, seedTrustNetworkHosts } from "@/lib/trust-network"
 
 export const FOLLOWER_COOKIE = "geodesics_follower"
 
@@ -10,6 +11,7 @@ export type Explorer = {
     last_origin: string
     last_route: string
     following: boolean
+    networks: string[]
 }
 
 export function normalizeExplorerId(raw: string): string {
@@ -19,6 +21,10 @@ export function normalizeExplorerId(raw: string): string {
 export async function listExplorers(follower?: string | null): Promise<Explorer[]> {
     if (!hasDatabase()) return []
     try {
+        await seedTrustNetworkHosts().catch(() => {})
+        const networked = await networkedAgentIds()
+        if (!networked.size) return []
+
         return await timed(async (q) => {
             const rows = await q`
                 SELECT
@@ -30,7 +36,7 @@ export async function listExplorers(follower?: string | null): Promise<Explorer[
                 FROM trails
                 GROUP BY agent
                 ORDER BY COUNT(*) DESC, MAX(discovered_at) DESC
-                LIMIT 16
+                LIMIT 32
             `
             const following = new Set<string>()
             if (follower) {
@@ -41,15 +47,39 @@ export async function listExplorers(follower?: string | null): Promise<Explorer[
                     /* table may not exist yet */
                 }
             }
-            return rows.map((row) => ({
-                id: String(row.id),
-                trails: Number(row.trails) || 0,
-                origins: Number(row.origins) || 0,
-                follows: 0,
-                last_origin: String(row.last_origin ?? ""),
-                last_route: String(row.last_route ?? ""),
-                following: following.has(String(row.id)),
-            }))
+
+            const memberNets = await (async () => {
+                try {
+                    return await q`SELECT principal, network FROM network_members WHERE kind IN ('agent', 'host')`
+                } catch {
+                    return [] as Array<{ principal: string; network: string }>
+                }
+            })()
+
+            const byPrincipal = new Map<string, string[]>()
+            for (const row of memberNets) {
+                const id = String(row.principal).toLowerCase()
+                const list = byPrincipal.get(id) ?? []
+                list.push(String(row.network))
+                byPrincipal.set(id, list)
+            }
+
+            return rows
+                .filter((row) => networked.has(String(row.id).toLowerCase()))
+                .slice(0, 16)
+                .map((row) => {
+                    const id = String(row.id)
+                    return {
+                        id,
+                        trails: Number(row.trails) || 0,
+                        origins: Number(row.origins) || 0,
+                        follows: 0,
+                        last_origin: String(row.last_origin ?? ""),
+                        last_route: String(row.last_route ?? ""),
+                        following: following.has(id),
+                        networks: byPrincipal.get(id.toLowerCase()) ?? [],
+                    }
+                })
         }, 2500)
     } catch {
         return []

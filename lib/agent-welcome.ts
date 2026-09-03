@@ -1,13 +1,15 @@
 export const AGENT_WELCOME = {
-    welcome: "You're on GEODESICS. A trail is a trace of an action on the Web — not an API resource.",
-    write: "in-page WebMCP",
+    welcome:
+        "You're on GEODESICS. Read the map freely. Leaving a trail requires login + a trust network invite.",
+    write: "in-page WebMCP after geodesics_agent_login + geodesics_join_network",
     discover: "/.well-known/webmcp.json",
     read: {
         trails: "GET /api/trails",
         agent: "GET /api/agent",
+        explorers: "GET /api/explorers",
     },
     try: 'document.modelContext.executeTool("geodesics_leave_trail", { origin, route })',
-    also: 'window.__geodesicsExecuteTool("geodesics_leave_trail", { origin, route })',
+    also: 'window.__geodesicsExecuteTool("geodesics_join_network", { network: "jury", key })',
 } as const
 
 export const PUBLIC_AGENT_HEADERS: Record<string, string> = {

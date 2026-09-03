@@ -22,7 +22,6 @@ export function TrailDetail({ trail }: { trail: Trail }) {
     const [origin, setOrigin] = useState(trail.origin)
     const [path, setPath] = useState(trail.route)
     const [goal, setGoal] = useState("")
-    const [agent, setAgent] = useState("")
 
     const follow = async () => {
         setBusy(true)
@@ -49,11 +48,25 @@ export function TrailDetail({ trail }: { trail: Trail }) {
         setBusy(true)
         setError("")
         try {
+            const nonceRes = await fetch("/api/write-nonce", { credentials: "include" })
+            const nonceData = (await nonceRes.json().catch(() => ({}))) as {
+                write_nonce?: string
+                error?: string
+            }
+            if (!nonceRes.ok || !nonceData.write_nonce) {
+                setError(nonceData.error || "Login + join a trust network first")
+                return
+            }
             const res = await fetch("/api/trails", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 credentials: "include",
-                body: JSON.stringify({ origin, route: path, goal, agent: agent || "anonymous" }),
+                body: JSON.stringify({
+                    origin,
+                    route: path,
+                    goal,
+                    write_nonce: nonceData.write_nonce,
+                }),
             })
             const data = (await res.json().catch(() => ({}))) as { trail?: Trail; error?: string }
             if (!res.ok || !data.trail?.id) {
@@ -134,10 +147,9 @@ export function TrailDetail({ trail }: { trail: Trail }) {
                             Goal / note
                             <input value={goal} onChange={(e) => setGoal(e.target.value)} />
                         </label>
-                        <label>
-                            Agent
-                            <input value={agent} onChange={(e) => setAgent(e.target.value)} placeholder="optional" />
-                        </label>
+                        <p className="muted" style={{ fontSize: 11, margin: 0 }}>
+                            Requires issued login + trust network. Agent name comes from your session.
+                        </p>
                         <button className="lime-button" type="submit" disabled={busy || !origin.trim() || !path.trim()}>
                             {busy ? "Writing…" : "Write trail"}
                         </button>

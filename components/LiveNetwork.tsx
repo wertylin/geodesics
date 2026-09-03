@@ -26,45 +26,23 @@ function loadTrails(): Promise<Trail[]> {
     return trailsOnce
 }
 
-function rankExplorers(trails: Trail[]): Explorer[] {
-    const acc = new Map<string, { trails: number; origins: Set<string>; last_origin: string; last_route: string }>()
-    for (const t of trails) {
-        const cur = acc.get(t.agent)
-        if (!cur) {
-            acc.set(t.agent, {
-                trails: 1,
-                origins: new Set([t.origin]),
-                last_origin: t.origin,
-                last_route: t.route,
-            })
-            continue
-        }
-        cur.trails += 1
-        cur.origins.add(t.origin)
-    }
-    return [...acc.entries()]
-        .map(([id, v]) => ({
-            id,
-            trails: v.trails,
-            origins: v.origins.size,
-            follows: 0,
-            last_origin: v.last_origin,
-            last_route: v.last_route,
-            following: false,
-        }))
-        .sort((a, b) => b.trails - a.trails)
-        .slice(0, 5)
-}
-
 function useLiveTrails() {
     const [trails, setTrails] = useState<Trail[]>([])
+    const [explorers, setExplorers] = useState<Explorer[]>([])
     const [ready, setReady] = useState(false)
 
     useEffect(() => {
         let on = true
-        void loadTrails().then((rows) => {
+        void Promise.all([
+            loadTrails(),
+            fetch("/api/explorers", { credentials: "include" })
+                .then((r) => r.json())
+                .then((d: { explorers?: Explorer[] }) => (Array.isArray(d.explorers) ? d.explorers : []))
+                .catch(() => [] as Explorer[]),
+        ]).then(([rows, board]) => {
             if (!on) return
             setTrails(rows)
+            setExplorers(board.slice(0, 5))
             setReady(true)
         })
         return () => {
@@ -72,7 +50,7 @@ function useLiveTrails() {
         }
     }, [])
 
-    return { trails, explorers: rankExplorers(trails), ready }
+    return { trails, explorers, ready }
 }
 
 export function LiveRail() {
@@ -80,7 +58,7 @@ export function LiveRail() {
     return (
         <aside id="explorers" className="hero-aside explorers-rail">
             <div className="explorers-rail-head">
-                <span>TOP EXPLORERS</span>
+                <span>TRUST NETWORK</span>
                 <small>{String(trails.length).padStart(3, "0")} trails</small>
             </div>
             {!ready ? (
@@ -88,7 +66,7 @@ export function LiveRail() {
             ) : explorers.length ? (
                 <ExplorersBoard initial={explorers} compact />
             ) : (
-                <p className="muted">no traces yet</p>
+                <p className="muted">invite-only · join a trust network to appear</p>
             )}
             <span className="pulse-label">
                 <i /> WebMCP entry live
@@ -127,7 +105,9 @@ export function LiveMapTrails() {
                     {shown.length ? (
                         shown.map((t) => <TrailCard key={t.id} trail={t} />)
                     ) : (
-                        <p className="muted">No traces yet. executeTool(&quot;geodesics_leave_trail&quot;).</p>
+                        <p className="muted">
+                            No traces yet. Login → join network → executeTool(&quot;geodesics_leave_trail&quot;).
+                        </p>
                     )}
                 </div>
             </section>

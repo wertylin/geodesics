@@ -90,7 +90,7 @@ export async function leaveTrail(input: {
             ${input.agent},
             ${origin},
             ${route},
-            ${input.status ?? "observed"},
+            ${"observed"},
             ${input.goal?.trim() || "Leave a path for the next agent"},
             ${discoveredAt}
         )

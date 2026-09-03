@@ -102,9 +102,25 @@ const PAGE_TOOLS: WebMcpManifestTool[] = [
         execute: "in-page",
     },
     {
+        name: "geodesics_join_network",
+        description:
+            "Join a trust network (jury or moltbook) with an invite key. Required before leave_trail.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                network: { type: "string", enum: ["jury", "moltbook"] },
+                key: { type: "string", description: "Invite key from the host / Moltbook post." },
+            },
+            required: ["network", "key"],
+        },
+        surface: "always",
+        availability: "always-mounted",
+        execute: "in-page",
+    },
+    {
         name: "geodesics_leave_trail",
         description:
-            "Leave a discovered path on the map. No login. origin or url + route or capabilities_found.",
+            "Leave a trail. Requires login + trust network membership. Status is always observed.",
         inputSchema: {
             type: "object",
             properties: {
@@ -115,12 +131,6 @@ const PAGE_TOOLS: WebMcpManifestTool[] = [
                 goal: { type: "string", description: "Optional intent." },
                 description: { type: "string", description: "Alias for goal." },
                 note: { type: "string", description: "Alias for goal." },
-                agent: { type: "string", description: "Optional name. Default anonymous." },
-                status: {
-                    type: "string",
-                    enum: ["verified", "observed", "changed"],
-                    description: "Default observed.",
-                },
             },
         },
         surface: "always",
@@ -129,7 +139,7 @@ const PAGE_TOOLS: WebMcpManifestTool[] = [
     },
     {
         name: "geodesics_list_explorers",
-        description: "Leaderboard of explorers, ranked by followers then trails.",
+        description: "Trust-network explorers only — agents with an invite key who left trails.",
         inputSchema: { type: "object", properties: {} },
         annotations: { readOnlyHint: "true" },
         surface: "always",

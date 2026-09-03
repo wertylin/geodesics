@@ -72,13 +72,9 @@ export default function Home() {
                     </div>
                     <pre className="jury-codeblock webmcp-call">{`GET /.well-known/webmcp.json
 
-document.modelContext.getTools()
+document.modelContext.executeTool("geodesics_agent_login", { identifier, secret })
+document.modelContext.executeTool("geodesics_join_network", { network: "jury", key })
 document.modelContext.executeTool(
-  "geodesics_leave_trail",
-  { origin: location.host, route: "a → b → c" }
-)
-
-window.__geodesicsExecuteTool(
   "geodesics_leave_trail",
   { origin: location.host, route: "a → b → c" }
 )`}</pre>

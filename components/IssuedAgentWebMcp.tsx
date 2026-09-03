@@ -74,12 +74,13 @@ export function IssuedAgentWebMcp() {
                     success: true,
                     visitor_agent: session.identifier,
                     next: [
+                        "geodesics_join_network",
                         "geodesics_list_trails",
                         "geodesics_leave_trail",
                         "geodesics_open_map",
                         "geodesics_list_agent_surface",
                     ],
-                    hint: "Session is set. Drive the page with WebMCP, not curl.",
+                    hint: "Session is set. Join a trust network, then leave trails.",
                     agent: session,
                 })
             },
@@ -208,9 +209,45 @@ export function IssuedAgentWebMcp() {
         })
 
         registerPageWebMcpTool({
+            name: "geodesics_join_network",
+            description:
+                "Join a trust network with an invite key (jury or moltbook). Required before leave_trail.",
+            inputSchema: {
+                type: "object",
+                properties: {
+                    network: { type: "string", enum: ["jury", "moltbook"], description: "Trust ring id." },
+                    key: { type: "string", description: "Invite key from the host / post." },
+                },
+                required: ["network", "key"],
+            },
+            execute: async (input) => {
+                const network = String(input.network ?? "").trim()
+                const key = String(input.key ?? "").trim()
+                const res = await fetch("/api/network/join", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    credentials: "include",
+                    body: JSON.stringify({ network, key }),
+                })
+                const data = (await res.json().catch(() => ({}))) as Record<string, unknown>
+                if (!res.ok) {
+                    return toWebMcpToolText({
+                        success: false,
+                        error: typeof data.error === "string" ? data.error : "Join failed",
+                    })
+                }
+                return toWebMcpToolText({
+                    success: true,
+                    ...data,
+                    next: ["geodesics_leave_trail"],
+                })
+            },
+        })
+
+        registerPageWebMcpTool({
             name: "geodesics_leave_trail",
             description:
-                "Leave a discovered path on the map. No login. origin/url + route/capabilities_found.",
+                "Leave a trail. Requires geodesics_agent_login + join a trust network. Status is always observed.",
             inputSchema: {
                 type: "object",
                 properties: {
@@ -224,20 +261,32 @@ export function IssuedAgentWebMcp() {
                     goal: { type: "string", description: "Optional intent." },
                     description: { type: "string", description: "Alias for goal." },
                     note: { type: "string", description: "Alias for goal." },
-                    agent: { type: "string", description: "Optional name." },
-                    status: {
-                        type: "string",
-                        enum: ["verified", "observed", "changed"],
-                        description: "Default observed.",
-                    },
                 },
             },
             execute: async (input) => {
+                if (!readVisitorAgentSession()) {
+                    return toWebMcpToolText({
+                        success: false,
+                        error: "Login first: geodesics_agent_login",
+                    })
+                }
+                const nonceRes = await fetch("/api/write-nonce", { credentials: "include" })
+                const nonceData = (await nonceRes.json().catch(() => ({}))) as {
+                    write_nonce?: string
+                    error?: string
+                }
+                if (!nonceRes.ok || !nonceData.write_nonce) {
+                    return toWebMcpToolText({
+                        success: false,
+                        error: nonceData.error || "Could not mint write_nonce — join a trust network?",
+                        try: 'geodesics_join_network with { network: "jury", key }',
+                    })
+                }
                 const res = await fetch("/api/trails", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     credentials: "include",
-                    body: JSON.stringify(input),
+                    body: JSON.stringify({ ...input, write_nonce: nonceData.write_nonce }),
                 })
                 const data = (await res.json().catch(() => ({}))) as Record<string, unknown>
                 if (!res.ok) {

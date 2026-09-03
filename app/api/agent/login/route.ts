@@ -56,12 +56,13 @@ export async function POST(req: NextRequest) {
             mode: "agent",
             agent: result.agent,
             next: [
+                "geodesics_join_network",
                 "geodesics_list_trails",
                 "geodesics_leave_trail",
                 "geodesics_open_map",
                 "geodesics_list_agent_surface",
             ],
-            hint: "Session cookie set. Drive the page with WebMCP, not curl.",
+            hint: "Session cookie set. Join a trust network, then leave trails via WebMCP.",
         },
         { headers: cors }
     )
