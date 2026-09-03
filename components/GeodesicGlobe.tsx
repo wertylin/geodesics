@@ -143,8 +143,8 @@ const SEED: Trail[] = [
     {
         id: "seed-4",
         agent: "seed",
-        origin: "localhost:3000",
-        route: "login → leave_trail",
+        origin: "news.ycombinator.com",
+        route: "item → thread → reply",
         status: "observed",
         age: "",
     },

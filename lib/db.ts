@@ -74,6 +74,10 @@ export async function ensureSchema() {
             `
             await db`ALTER TABLE trails ADD COLUMN IF NOT EXISTS next TEXT[] NOT NULL DEFAULT ARRAY['/map']::TEXT[]`
             await db`
+                DELETE FROM trails
+                WHERE origin ~* '(localhost|127\\.0\\.0\\.\\d+|\\[?::1\\]?|0\\.0\\.0\\.0)'
+            `
+            await db`
                 CREATE TABLE IF NOT EXISTS jury (
                     slug TEXT PRIMARY KEY,
                     name TEXT NOT NULL,

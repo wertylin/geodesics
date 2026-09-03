@@ -1,5 +1,5 @@
 import { ensureSchema, hasDatabase, sql } from "../lib/db"
-import { listTrails, seedTrailsIfEmpty } from "../lib/trails-store"
+import { listTrails, purgeLoopbackTrails, seedTrailsIfEmpty } from "../lib/trails-store"
 import { seedJury } from "../lib/jury"
 import { seedTrustNetworkHosts, listNetworkMembers } from "../lib/trust-network"
 
@@ -9,6 +9,8 @@ async function main() {
         process.exit(1)
     }
     await ensureSchema()
+    const purged = await purgeLoopbackTrails()
+    console.log("purged loopback trails", purged)
     await seedTrailsIfEmpty()
     await seedJury()
     await seedTrustNetworkHosts()

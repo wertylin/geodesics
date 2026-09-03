@@ -1,4 +1,4 @@
-import { formatTrailAge, type Trail, type TrailStatus } from "@/lib/trails"
+import { assertPublicOrigin, formatTrailAge, isLoopbackOrigin, type Trail, type TrailStatus } from "@/lib/trails"
 import { hasDatabase, sql, timed } from "@/lib/db"
 
 function withAge(trail: Trail): Trail {
@@ -34,6 +34,16 @@ export async function seedTrailsIfEmpty() {
     /* no fake rows — trails come from agents */
 }
 
+export async function purgeLoopbackTrails(): Promise<number> {
+    if (!hasDatabase()) return 0
+    const rows = await sql()`
+        DELETE FROM trails
+        WHERE origin ~* '(localhost|127\\.0\\.0\\.\\d+|\\[?::1\\]?|0\\.0\\.0\\.0)'
+        RETURNING id
+    `
+    return rows.length
+}
+
 export async function listTrails(): Promise<Trail[]> {
     if (!hasDatabase()) return []
     try {
@@ -45,7 +55,7 @@ export async function listTrails(): Promise<Trail[]> {
             `,
             2500
         )
-        return rows.map(rowToTrail)
+        return rows.map(rowToTrail).filter((t) => !isLoopbackOrigin(t.origin))
     } catch {
         return []
     }
@@ -75,6 +85,7 @@ export async function leaveTrail(input: {
     const route = input.route.trim()
     if (!origin) throw Object.assign(new Error("origin is required"), { status: 400 })
     if (!route) throw Object.assign(new Error("route is required"), { status: 400 })
+    assertPublicOrigin(origin)
     if (!hasDatabase()) {
         throw Object.assign(new Error("POSTGRES_URL is not set — trails cannot persist"), { status: 503 })
     }

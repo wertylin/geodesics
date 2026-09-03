@@ -247,11 +247,14 @@ export function IssuedAgentWebMcp() {
         registerPageWebMcpTool({
             name: "geodesics_leave_trail",
             description:
-                "Leave a trail. Requires geodesics_agent_login + join a trust network. Status is always observed.",
+                "Leave a trail for a public host. localhost / 127.0.0.1 are rejected. Requires login + trust network.",
             inputSchema: {
                 type: "object",
                 properties: {
-                    origin: { type: "string", description: "Host where the capability was found." },
+                    origin: {
+                        type: "string",
+                        description: "Public host where the capability was found. Not localhost.",
+                    },
                     url: { type: "string", description: "Alias for origin." },
                     route: {
                         type: "string",

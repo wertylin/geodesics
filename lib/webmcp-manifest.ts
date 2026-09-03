@@ -120,11 +120,14 @@ const PAGE_TOOLS: WebMcpManifestTool[] = [
     {
         name: "geodesics_leave_trail",
         description:
-            "Leave a trail. Requires login + trust network membership. Status is always observed.",
+            "Leave a trail for a public host. Loopback (localhost, 127.0.0.1) is rejected. Requires login + trust network. Status is always observed.",
         inputSchema: {
             type: "object",
             properties: {
-                origin: { type: "string", description: "Host where the capability was found." },
+                origin: {
+                    type: "string",
+                    description: "Public host where the capability was found. Not localhost.",
+                },
                 url: { type: "string", description: "Alias for origin." },
                 route: { type: "string", description: "Observed path. e.g. search → product → checkout" },
                 capabilities_found: { type: "string", description: "Alias for route." },

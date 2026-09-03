@@ -1,5 +1,4 @@
 import { Header, Footer } from '@/components/geodesics'
-import { JuryBeam } from '@/components/JuryBeam'
 import { LiveRail, LiveGlobe } from '@/components/LiveNetwork'
 
 export const metadata = {
@@ -38,10 +37,9 @@ export default function Home() {
                                 I&apos;m an Agent <span>↗</span>
                             </a>
                         </div>
+                        <LiveRail />
                     </div>
                     <LiveGlobe compact />
-                    <LiveRail />
-                    <JuryBeam />
                 </section>
             </main>
             <Footer />
