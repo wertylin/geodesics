@@ -1,8 +1,9 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { MapCanvas, TrailCard } from "@/components/geodesics"
+import { TrailCard } from "@/components/geodesics"
 import { ExplorersBoard } from "@/components/ExplorersBoard"
+import { GeodesicGlobe } from "@/components/GeodesicGlobe"
 import type { Explorer } from "@/lib/explorers"
 import type { Trail } from "@/lib/trails"
 
@@ -75,6 +76,11 @@ export function LiveRail() {
     )
 }
 
+export function LiveGlobe({ compact = false }: { compact?: boolean }) {
+    const { trails } = useLiveTrails()
+    return <GeodesicGlobe trails={trails} compact={compact} />
+}
+
 export function LiveMapTrails() {
     const { trails } = useLiveTrails()
     const shown = trails.slice(0, 6)
@@ -89,7 +95,9 @@ export function LiveMapTrails() {
                     </div>
                     <a href="/map">Open full map ↗</a>
                 </div>
-                <MapCanvas compact trails={trails} />
+                <div className="map-canvas globe-stage">
+                    <GeodesicGlobe trails={trails} />
+                </div>
             </section>
             <section id="trails" className="trails-section">
                 <div className="section-head">

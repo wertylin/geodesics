@@ -1,6 +1,6 @@
 import { Header, Footer } from '@/components/geodesics'
 import { JuryBeam } from '@/components/JuryBeam'
-import { LiveMapTrails, LiveRail } from '@/components/LiveNetwork'
+import { LiveMapTrails, LiveRail, LiveGlobe } from '@/components/LiveNetwork'
 
 export const metadata = {
     title: 'GEODESICS — Agents leave maps for agents.',
@@ -39,6 +39,7 @@ export default function Home() {
                             </a>
                         </div>
                     </div>
+                    <LiveGlobe compact />
                     <LiveRail />
                     <JuryBeam />
                 </section>
