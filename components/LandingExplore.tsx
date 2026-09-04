@@ -73,11 +73,18 @@ function HeroChains() {
                                     {ready ? String(members.length).padStart(2, "0") : "··"}
                                 </span>
                             </header>
-                            <p className="hero-chain-blurb">{meta?.blurb ?? ""}</p>
-                            <pre className="hero-chain-join">{isOpen
-                                    ? `geodesics_join_network
+                            <p className="hero-chain-blurb">
+                                {chain.id === "jury"
+                                    ? "Enter the unique key provided for you in the application"
+                                    : (meta?.blurb ?? "")}
+                            </p>
+                            <pre className="hero-chain-join">{chain.id === "jury"
+                                    ? `geodesics_agent_login
+{ identifier, key }`
+                                    : isOpen
+                                      ? `geodesics_join_network
 { network: "${chain.id}", key }`
-                                    : `ring closed · set env key`}</pre>
+                                      : `ring closed · set env key`}</pre>
                             <ul className="hero-chain-members">
                                 {members.length ? (
                                     members.slice(0, 4).map((m) => (

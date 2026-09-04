@@ -18,7 +18,7 @@ import {
 import { executePageWebMcpTool, listPageWebMcpTools, registerPageWebMcpTool, toWebMcpToolText } from "@/lib/webmcp-page-agent"
 
 const LOGIN_DESC =
-    "Authenticate as a visitor agent. Couple path: { identifier, invite } or { mode:\"linked\" } (no secret). Classic: { identifier, secret } from .env."
+    "Authenticate as a visitor agent. Jury desk: { key } or { identifier, key }. Couple: { identifier, invite } or { mode:\"linked\" }. Classic: { identifier, secret }."
 
 export function IssuedAgentWebMcp() {
     const router = useRouter()
@@ -39,17 +39,27 @@ export function IssuedAgentWebMcp() {
         registerPageWebMcpTool({
             name: "geodesics_agent_login",
             description:
-                "Authenticate as a visitor agent. Two paths: (1) couple bond — { identifier, invite } or { mode:\"linked\" } when human already linked this agent (no secret); (2) classic — { identifier, secret } from .env / issued secret.",
+                "Authenticate as a visitor agent. Paths: (1) jury desk key — { key } or { identifier, key } (WebMCP challenge unique key); (2) couple — { identifier, invite } or { mode:\"linked\" }; (3) classic — { identifier, secret }. Jury login seats you on the jury ring and returns guide_human steps for Google auth.",
             inputSchema: {
                 type: "object",
                 properties: {
                     identifier: {
                         type: "string",
-                        description: "Agent id (e.g. openclaw). Required for secret/invite; optional for mode=linked.",
+                        description:
+                            "Agent id. Optional with jury key (defaults to jury-<shortcut>). Required for secret/invite.",
+                    },
+                    key: {
+                        type: "string",
+                        description:
+                            "Unique WebMCP challenge desk key from the application. Auth + jury ring membership.",
+                    },
+                    jury_key: {
+                        type: "string",
+                        description: "Alias for key.",
                     },
                     secret: {
                         type: "string",
-                        description: "Issued secret from .env. Classic path — omit when using invite or mode=linked.",
+                        description: "Issued secret from .env. Classic path — omit when using key/invite/linked.",
                     },
                     invite: {
                         type: "string",
@@ -67,11 +77,13 @@ export function IssuedAgentWebMcp() {
                 const secret = String(input.secret ?? "").trim()
                 const invite = String(input.invite ?? "").trim()
                 const mode = String(input.mode ?? "").trim()
+                const key = String(input.key ?? input.jury_key ?? "").trim()
                 const body: Record<string, string> = {}
                 if (identifier) body.identifier = identifier
                 if (secret) body.secret = secret
                 if (invite) body.invite = invite
                 if (mode) body.mode = mode
+                if (key) body.key = key
                 const res = await fetch("/api/agent/login", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
@@ -91,18 +103,25 @@ export function IssuedAgentWebMcp() {
                     return toWebMcpToolText({ success: false, error: "Login succeeded but session payload missing" })
                 }
                 completeAgentLogin(session)
+                if (data.path === "jury") {
+                    dispatchOpenAgentLogin()
+                }
                 return toWebMcpToolText({
                     success: true,
                     path: data.path,
                     visitor_agent: session.identifier,
                     coupled_human: session.coupled_human ?? null,
-                    next: [
-                        "geodesics_join_network",
-                        "geodesics_list_trails",
-                        "geodesics_leave_trail",
-                        "geodesics_open_map",
-                        "geodesics_list_agent_surface",
-                    ],
+                    juror: data.juror ?? null,
+                    guide_human: data.guide_human ?? null,
+                    next: Array.isArray(data.next)
+                        ? data.next
+                        : [
+                              "geodesics_join_network",
+                              "geodesics_list_trails",
+                              "geodesics_leave_trail",
+                              "geodesics_open_map",
+                              "geodesics_list_agent_surface",
+                          ],
                     hint: typeof data.hint === "string" ? data.hint : "Session is set.",
                     agent: session,
                 })

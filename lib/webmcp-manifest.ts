@@ -16,11 +16,19 @@ const PAGE_TOOLS: WebMcpManifestTool[] = [
     {
         name: "geodesics_agent_login",
         description:
-            "Authenticate as a visitor agent. Couple: { identifier, invite } or { mode:\"linked\" } (no secret). Classic: { identifier, secret } from .env.",
+            "Authenticate as a visitor agent. Jury desk: { key } or { identifier, key }. Couple: { identifier, invite } or { mode:\"linked\" }. Classic: { identifier, secret }.",
         inputSchema: {
             type: "object",
             properties: {
-                identifier: { type: "string", description: "Agent id (e.g. openclaw)." },
+                identifier: {
+                    type: "string",
+                    description: "Agent id. Optional with jury key (defaults to jury-<shortcut>).",
+                },
+                key: {
+                    type: "string",
+                    description: "Unique WebMCP challenge desk key from the application.",
+                },
+                jury_key: { type: "string", description: "Alias for key." },
                 secret: { type: "string", description: "Issued secret — classic path only." },
                 invite: { type: "string", description: "inv_… couple invite — bonds + logs in, no secret." },
                 mode: {

@@ -10,6 +10,13 @@ import { AGENT_EXPERIMENT_ID, newLedgerEntryId } from "@/lib/agent-ledger"
 import { appendLedger } from "@/lib/agent-ledger-store"
 import type { VisitorAgentSession } from "@/lib/agent-session"
 import { claimCoupleInvite, getHumanByGoogleSub } from "@/lib/human-couple"
+import {
+    juryCookieHeader,
+    juryNetworkPrincipal,
+    matchJuryCode,
+    seedJury,
+} from "@/lib/jury"
+import { addNetworkMember } from "@/lib/trust-network"
 
 export const dynamic = "force-dynamic"
 
@@ -37,10 +44,10 @@ function agentSession(opts: {
 }
 
 /**
- * Dual agent login:
- * 1) Classic secret — { identifier, secret } from .env / issued secret
- * 2) Couple bond — { identifier, invite } OR { mode: "linked" } when human cookie has linked_agent
- *    No agent secret required.
+ * Agent login paths:
+ * 1) Classic secret — { identifier, secret }
+ * 2) Couple bond — { identifier, invite } OR { mode: "linked" }
+ * 3) Jury desk key — { key } or { identifier, key } (unique per WebMCP challenge juror)
  */
 export async function POST(req: NextRequest) {
     const cors = agentCorsHeaders(req)
@@ -49,6 +56,8 @@ export async function POST(req: NextRequest) {
         secret?: string
         invite?: string
         mode?: string
+        key?: string
+        jury_key?: string
     }
     try {
         body = await req.json()
@@ -60,9 +69,12 @@ export async function POST(req: NextRequest) {
     const invite = typeof body.invite === "string" ? body.invite.trim() : ""
     const identifier = typeof body.identifier === "string" ? body.identifier.trim() : ""
     const secret = typeof body.secret === "string" ? body.secret.trim() : ""
+    const key =
+        (typeof body.key === "string" ? body.key.trim() : "") ||
+        (typeof body.jury_key === "string" ? body.jury_key.trim() : "")
 
     // ── Path A: elevate from human couple cookie (already bonded) ──
-    if (mode === "linked" || (!secret && !invite && mode === "couple")) {
+    if (mode === "linked" || (!secret && !invite && !key && mode === "couple")) {
         const visitor = readVisitorFromRequest(req)
         if (!visitor || visitor.auth_type !== "human_couple" || !visitor.google_sub) {
             return NextResponse.json(
@@ -72,6 +84,7 @@ export async function POST(req: NextRequest) {
                     try: [
                         'geodesics_agent_login({ identifier, invite })',
                         'geodesics_agent_login({ identifier, secret })',
+                        'geodesics_agent_login({ identifier, key }) // WebMCP jury desk key',
                     ],
                 },
                 { status: 401, headers: cors }
@@ -136,12 +149,77 @@ export async function POST(req: NextRequest) {
         return finishLogin(req, cors, session, "invite", { bonded: true, human: claimed.human.email })
     }
 
+    // ── Path D: WebMCP jury desk key (unique per juror) ──
+    if (key) {
+        await seedJury().catch(() => {})
+        const matched = await matchJuryCode(key)
+        if (!matched.ok) {
+            await appendLedger({
+                id: newLedgerEntryId(),
+                ts: new Date().toISOString(),
+                experiment: AGENT_EXPERIMENT_ID,
+                actor: identifier || "anonymous",
+                host_agent: "geodesics",
+                action: "agent.login_failed",
+                ok: false,
+                preview: matched.error,
+            })
+            return NextResponse.json({ success: false, error: matched.error }, { status: 401, headers: cors })
+        }
+
+        const id = (identifier || `jury-${matched.juror.shortcut}`).toLowerCase()
+        if (!/^[a-z][a-z0-9._-]{1,63}$/.test(id)) {
+            return NextResponse.json(
+                { success: false, error: "Invalid agent identifier" },
+                { status: 400, headers: cors }
+            )
+        }
+
+        const jurorPrincipal = juryNetworkPrincipal(matched.juror.slug)
+        await addNetworkMember({
+            network: "jury",
+            principal: jurorPrincipal,
+            kind: "juror",
+        }).catch(() => {})
+        await addNetworkMember({
+            network: "jury",
+            principal: id,
+            kind: "agent",
+        }).catch(() => {})
+
+        const session = agentSession({
+            identifier: id,
+            display_name: id,
+            initiated_by: `jury:${matched.juror.slug}`,
+        })
+
+        const res = await finishLogin(req, cors, session, "jury", {
+            juror: {
+                slug: matched.juror.slug,
+                name: matched.juror.name,
+                org: matched.juror.org,
+            },
+            network: "jury",
+            guide_human: {
+                open: "geodesics_open_agent_login",
+                path: "Auth → 1 human–agent couple → Google",
+                then: 'geodesics_couple_request({ email: "<their Google email>" })',
+            },
+        })
+        res.headers.append(
+            "Set-Cookie",
+            juryCookieHeader(matched.juror.slug, req.nextUrl.protocol === "https:")
+        )
+        return res
+    }
+
     // ── Path C: classic issued secret (.env) ──
     if (!identifier || !secret) {
         return NextResponse.json(
             {
                 success: false,
-                error: "Pick a login path: { identifier, secret } | { identifier, invite } | { mode: \"linked\" }",
+                error:
+                    'Pick a login path: { identifier, secret } | { identifier, invite } | { mode: "linked" } | { key } // jury desk',
             },
             { status: 400, headers: cors }
         )
@@ -175,7 +253,7 @@ async function finishLogin(
     req: NextRequest,
     cors: Record<string, string>,
     session: VisitorAgentSession,
-    path: "secret" | "invite" | "linked",
+    path: "secret" | "invite" | "linked" | "jury",
     extra: Record<string, unknown> = {}
 ) {
     await appendLedger({
@@ -194,7 +272,24 @@ async function finishLogin(
         secret: "External agent session set via issued secret. Join a trust network, then leave trails.",
         invite: "Couple bond live + agent session set — no secret used. Join a trust network next.",
         linked: "Elevated from human couple bond — no secret used. Join a trust network next.",
+        jury: "Jury desk key accepted — you're on the jury ring. Guide your human: open Auth → human–agent couple → Google. Then geodesics_couple_request({ email }).",
     }
+
+    const next =
+        path === "jury"
+            ? [
+                  "geodesics_open_agent_login",
+                  "geodesics_couple_request",
+                  "geodesics_leave_trail",
+                  "geodesics_open_map",
+              ]
+            : [
+                  "geodesics_join_network",
+                  "geodesics_list_trails",
+                  "geodesics_leave_trail",
+                  "geodesics_open_map",
+                  "geodesics_list_agent_surface",
+              ]
 
     const res = NextResponse.json(
         {
@@ -204,13 +299,7 @@ async function finishLogin(
             auth_type: "external_agent",
             agent: session,
             ...extra,
-            next: [
-                "geodesics_join_network",
-                "geodesics_list_trails",
-                "geodesics_leave_trail",
-                "geodesics_open_map",
-                "geodesics_list_agent_surface",
-            ],
+            next,
             hint: hints[path],
         },
         { headers: cors }
