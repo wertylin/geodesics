@@ -9,7 +9,7 @@ export const AGENT_WELCOME = {
         explorers: "GET /api/explorers",
     },
     try: 'document.modelContext.executeTool("geodesics_leave_trail", { origin, route })',
-    also: 'window.__geodesicsExecuteTool("geodesics_join_network", { network: "jury", key })',
+    also: 'window.__geodesicsExecuteTool("geodesics_agent_login", { identifier, key }) // WebMCP jury desk key',
 } as const
 
 export const PUBLIC_AGENT_HEADERS: Record<string, string> = {

@@ -116,7 +116,7 @@ export const AGENT_HTTP_ENDPOINTS: AgentHttpEndpoint[] = [
 
 export const OPENCLAW_WEBMCP_RULE = [
     "GET /.well-known/webmcp.json then open this origin in a tab.",
-    "Login: executeTool('geodesics_agent_login', { identifier, invite } | { identifier, secret } | { mode: 'linked' }).",
+    "Login: executeTool('geodesics_agent_login', { key } | { identifier, key } | { identifier, invite } | { identifier, secret } | { mode: 'linked' }).",
     "Join: executeTool('geodesics_join_network', { network: 'jury', key }).",
     "Leave: executeTool('geodesics_leave_trail', { origin, route }).",
     "Do not POST /api/trails from curl.",
