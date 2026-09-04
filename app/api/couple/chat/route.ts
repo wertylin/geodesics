@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from "next/server"
 import { agentCorsHeaders, agentOptionsResponse, requireVisitor } from "@/lib/agent-access"
 import {
+    dropCouplePresence,
     listCoupleMessages,
     postCoupleMessage,
+    readCouplePresence,
     subscribeCoupleChat,
+    touchCouplePresence,
     type CoupleMessage,
 } from "@/lib/couple-chat"
 import { getHumanByGoogleSub, getHumanByLinkedAgent } from "@/lib/human-couple"
@@ -68,6 +71,7 @@ export async function GET(req: NextRequest) {
                 success: true,
                 pair: { agent: pair.agent, google_sub: pair.googleSub },
                 you: pair.sender,
+                presence: readCouplePresence(pair.googleSub, pair.agent),
                 messages,
             },
             { headers: { ...cors, "Cache-Control": "no-store" } }
@@ -93,14 +97,30 @@ export async function GET(req: NextRequest) {
                 if (m.google_sub !== pair.googleSub || m.agent !== pair.agent) return
                 push(`data: ${JSON.stringify(m)}\n\n`)
             }
+            const pushPresence = () => {
+                const presence = touchCouplePresence({
+                    googleSub: pair.googleSub,
+                    agent: pair.agent,
+                    role: pair.sender,
+                })
+                push(`event: presence\ndata: ${JSON.stringify(presence)}\n\n`)
+            }
+
+            touchCouplePresence({
+                googleSub: pair.googleSub,
+                agent: pair.agent,
+                role: pair.sender,
+            })
 
             push(
                 `event: hello\ndata: ${JSON.stringify({
                     ok: true,
                     pair: { agent: pair.agent },
                     you: pair.sender,
+                    presence: readCouplePresence(pair.googleSub, pair.agent),
                 })}\n\n`
             )
+            pushPresence()
 
             const recent = await listCoupleMessages({
                 googleSub: pair.googleSub,
@@ -110,12 +130,20 @@ export async function GET(req: NextRequest) {
             for (const m of recent) send(m)
 
             unsub = subscribeCoupleChat(send)
-            heartbeat = setInterval(() => push(`: ping\n\n`), 15_000)
+            heartbeat = setInterval(() => {
+                push(`: ping\n\n`)
+                pushPresence()
+            }, 15_000)
         },
         cancel() {
             closed = true
             unsub?.()
             if (heartbeat) clearInterval(heartbeat)
+            dropCouplePresence({
+                googleSub: pair.googleSub,
+                agent: pair.agent,
+                role: pair.sender,
+            })
         },
     })
 
@@ -154,8 +182,19 @@ export async function POST(req: NextRequest) {
             sender: pair.sender,
             body: text,
         })
+        touchCouplePresence({
+            googleSub: pair.googleSub,
+            agent: pair.agent,
+            role: pair.sender,
+        })
         return NextResponse.json(
-            { success: true, message, you: pair.sender, pair: { agent: pair.agent } },
+            {
+                success: true,
+                message,
+                you: pair.sender,
+                pair: { agent: pair.agent },
+                presence: readCouplePresence(pair.googleSub, pair.agent),
+            },
             { headers: cors }
         )
     } catch (err) {

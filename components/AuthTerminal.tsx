@@ -23,7 +23,7 @@ export function AuthTerminal() {
     const [invite, setInvite] = useState("")
     const [busy, setBusy] = useState(false)
     const [line, setLine] = useState("awaiting identity…")
-    const [googleOk, setGoogleOk] = useState(false)
+    const [googleOk, setGoogleOk] = useState<boolean | null>(null)
     const [webMcp, setWebMcp] = useState(false)
     const [session, setSession] = useState<VisitorAgentSession | null>(null)
 
@@ -165,13 +165,16 @@ webmcp     ${webMcp ? "ready" : "page registry"}`}</pre>
 
             {gate === "couple" ? (
                 <div className="auth-terminal-cmds">
-                    {googleOk ? (
+                    {googleOk === null ? (
+                        <p className="auth-terminal-hint">checking google oauth…</p>
+                    ) : googleOk ? (
                         <a className="auth-terminal-run" href="/api/auth/google">
                             run google_oauth →
                         </a>
                     ) : (
                         <p className="auth-terminal-hint">
-                            missing GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET
+                            google oauth off — need GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET +
+                            GEODESICS_AUTH_SECRET in .env.local, then restart next
                         </p>
                     )}
                     <button type="button" className="auth-terminal-back" onClick={() => setGate("choose")}>

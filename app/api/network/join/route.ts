@@ -14,6 +14,7 @@ import {
     listAllTrustNetworks,
     memberKindForAuth,
     networksForPrincipal,
+    networksOwnedBy,
     seedTrustNetworkHosts,
 } from "@/lib/trust-network"
 
@@ -31,12 +32,18 @@ export async function GET(req: NextRequest) {
     if (gate instanceof NextResponse) {
         return NextResponse.json({ networks, member: null, memberships: [] }, { headers: cors })
     }
-    const memberships = await networksForPrincipal(gate.visitor.identifier)
+    const [memberships, owned] = await Promise.all([
+        networksForPrincipal(gate.visitor.identifier),
+        gate.visitor.auth_type === "human_couple"
+            ? networksOwnedBy(gate.visitor.identifier)
+            : Promise.resolve([]),
+    ])
     return NextResponse.json(
         {
             networks,
             member: gate.visitor.identifier,
             memberships,
+            owned: owned.map((n) => n.id),
         },
         { headers: cors }
     )

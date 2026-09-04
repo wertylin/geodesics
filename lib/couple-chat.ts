@@ -9,11 +9,19 @@ export type CoupleMessage = {
     created_at: string
 }
 
+export type CouplePresence = {
+    human: boolean
+    agent: boolean
+}
+
 type MemMsg = CoupleMessage
+
+const PRESENCE_TTL_MS = 45_000
 
 const g = globalThis as typeof globalThis & {
     __geodesicsCoupleChat?: MemMsg[]
     __geodesicsCoupleChatSubs?: Set<(m: CoupleMessage) => void>
+    __geodesicsCouplePresence?: Map<string, { human?: number; agent?: number }>
 }
 
 function mem(): MemMsg[] {
@@ -24,6 +32,53 @@ function mem(): MemMsg[] {
 function subs(): Set<(m: CoupleMessage) => void> {
     if (!g.__geodesicsCoupleChatSubs) g.__geodesicsCoupleChatSubs = new Set()
     return g.__geodesicsCoupleChatSubs
+}
+
+function presenceMap(): Map<string, { human?: number; agent?: number }> {
+    if (!g.__geodesicsCouplePresence) g.__geodesicsCouplePresence = new Map()
+    return g.__geodesicsCouplePresence
+}
+
+function pairKey(googleSub: string, agent: string): string {
+    return `${googleSub.trim()}::${agent.trim().toLowerCase()}`
+}
+
+/** Mark a couple seat online (SSE open / heartbeat). */
+export function touchCouplePresence(opts: {
+    googleSub: string
+    agent: string
+    role: "human" | "agent"
+}): CouplePresence {
+    const key = pairKey(opts.googleSub, opts.agent)
+    const row = presenceMap().get(key) ?? {}
+    const now = Date.now()
+    if (opts.role === "human") row.human = now
+    else row.agent = now
+    presenceMap().set(key, row)
+    return readCouplePresence(opts.googleSub, opts.agent)
+}
+
+export function dropCouplePresence(opts: {
+    googleSub: string
+    agent: string
+    role: "human" | "agent"
+}): void {
+    const key = pairKey(opts.googleSub, opts.agent)
+    const row = presenceMap().get(key)
+    if (!row) return
+    if (opts.role === "human") delete row.human
+    else delete row.agent
+    if (!row.human && !row.agent) presenceMap().delete(key)
+    else presenceMap().set(key, row)
+}
+
+export function readCouplePresence(googleSub: string, agent: string): CouplePresence {
+    const row = presenceMap().get(pairKey(googleSub, agent))
+    const now = Date.now()
+    return {
+        human: Boolean(row?.human && now - row.human < PRESENCE_TTL_MS),
+        agent: Boolean(row?.agent && now - row.agent < PRESENCE_TTL_MS),
+    }
 }
 
 export function subscribeCoupleChat(fn: (m: CoupleMessage) => void): () => void {

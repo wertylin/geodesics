@@ -21,6 +21,7 @@ export type TrustNetwork = {
     /** Invite key configured (env or DB). Empty = network closed. */
     configured: boolean
     kind: "system" | "human"
+    /** Initiator / admin principal (`human:…`). */
     owner_principal?: string
 }
 
@@ -31,14 +32,20 @@ export type NetworkMember = {
     joined_at: string
 }
 
-export type HumanNetworkRow = {
+export type NetworkRow = {
     id: string
     label: string
-    kind: "human"
+    kind: "human" | "system"
     owner_principal: string
     invite_hash: string
     created_at: string
 }
+
+/** @deprecated use NetworkRow */
+export type HumanNetworkRow = NetworkRow
+
+/** Default initiator for builtin rings (jury / moltbook). Overridable via env. */
+export const DEFAULT_SYSTEM_INITIATOR_EMAIL = "selin@organizma.co"
 
 const NETWORKS: TrustRingDef[] = TRUST_RINGS
 
@@ -110,12 +117,13 @@ export function listTrustNetworks(): TrustNetwork[] {
     return listBuiltinTrustNetworks()
 }
 
+/** Public listing — never includes owner_principal (Google sub / human:…). */
 export async function listHumanNetworks(): Promise<TrustNetwork[]> {
     if (!hasDatabase()) return []
     try {
         await ensureNetworksTables()
         const rows = await sql()`
-            SELECT id, label, owner_principal, created_at
+            SELECT id, label, created_at
             FROM networks
             WHERE kind = 'human'
             ORDER BY created_at DESC
@@ -127,19 +135,34 @@ export async function listHumanNetworks(): Promise<TrustNetwork[]> {
             blurb: "human trust network",
             configured: true,
             kind: "human" as const,
-            owner_principal: String(row.owner_principal),
         }))
     } catch {
         return []
     }
 }
 
+/** Public catalog for GET /api/network/join — no owner_principal. */
 export async function listAllTrustNetworks(): Promise<TrustNetwork[]> {
     const human = await listHumanNetworks()
     return [...listBuiltinTrustNetworks(), ...human]
 }
 
-export async function getHumanNetwork(id: string): Promise<HumanNetworkRow | null> {
+function mapNetworkRow(row: Record<string, unknown>): NetworkRow {
+    const kind = String(row.kind) === "system" ? "system" : "human"
+    return {
+        id: String(row.id),
+        label: String(row.label),
+        kind,
+        owner_principal: String(row.owner_principal),
+        invite_hash: String(row.invite_hash),
+        created_at:
+            row.created_at instanceof Date
+                ? row.created_at.toISOString()
+                : new Date(String(row.created_at)).toISOString(),
+    }
+}
+
+export async function getNetworkRow(id: string): Promise<NetworkRow | null> {
     if (!hasDatabase() || !id.trim()) return null
     try {
         await ensureNetworksTables()
@@ -151,20 +174,72 @@ export async function getHumanNetwork(id: string): Promise<HumanNetworkRow | nul
         `
         const row = rows[0]
         if (!row) return null
-        return {
-            id: String(row.id),
-            label: String(row.label),
-            kind: "human",
-            owner_principal: String(row.owner_principal),
-            invite_hash: String(row.invite_hash),
-            created_at:
-                row.created_at instanceof Date
-                    ? row.created_at.toISOString()
-                    : new Date(String(row.created_at)).toISOString(),
-        }
+        return mapNetworkRow(row as Record<string, unknown>)
     } catch {
         return null
     }
+}
+
+/** @deprecated prefer getNetworkRow */
+export async function getHumanNetwork(id: string): Promise<HumanNetworkRow | null> {
+    return getNetworkRow(id)
+}
+
+async function systemOwnerMap(): Promise<Map<string, string>> {
+    const out = new Map<string, string>()
+    if (!hasDatabase()) return out
+    try {
+        await ensureNetworksTables()
+        const rows = await sql()`
+            SELECT id, owner_principal FROM networks
+            WHERE kind = 'system' OR id IN ('jury', 'moltbook')
+        `
+        for (const row of rows) {
+            out.set(String(row.id), String(row.owner_principal))
+        }
+    } catch {
+        /* ignore */
+    }
+    return out
+}
+
+export async function networksOwnedBy(principal: string): Promise<TrustNetwork[]> {
+    if (!hasDatabase() || !principal.trim()) return []
+    try {
+        await ensureNetworksTables()
+        const owners = await systemOwnerMap()
+        const p = principal.trim().toLowerCase()
+        const ownedBuiltins = listBuiltinTrustNetworks().filter((n) => owners.get(n.id) === p)
+        const rows = await sql()`
+            SELECT id, label, created_at
+            FROM networks
+            WHERE kind = 'human' AND owner_principal = ${p}
+            ORDER BY created_at DESC
+            LIMIT 100
+        `
+        const ownedHuman = rows.map((row) => ({
+            id: String(row.id),
+            label: String(row.label),
+            blurb: "human trust network",
+            configured: true,
+            kind: "human" as const,
+        }))
+        return [...ownedBuiltins, ...ownedHuman]
+    } catch {
+        return []
+    }
+}
+
+export async function isNetworkInitiator(network: TrustNetworkId, principal: string): Promise<boolean> {
+    const p = principal.trim().toLowerCase()
+    if (!p.startsWith("human:")) return false
+    const id = network.trim().toLowerCase()
+    if (isBuiltinTrustNetworkId(id)) {
+        const owners = await systemOwnerMap()
+        return owners.get(id) === p
+    }
+    const row = await getNetworkRow(id)
+    return Boolean(row && row.kind === "human" && row.owner_principal === p)
 }
 
 export async function addNetworkMember(opts: {
@@ -315,7 +390,6 @@ export async function createHumanTrustNetwork(opts: {
             blurb: "human trust network",
             configured: true,
             kind: "human",
-            owner_principal: owner,
         },
         invite,
         members,
@@ -369,9 +443,102 @@ export async function joinNetworkWithKey(opts: {
     })
 }
 
+export async function removeNetworkMember(opts: {
+    network: TrustNetworkId
+    principal: string
+}): Promise<boolean> {
+    if (!hasDatabase()) throw Object.assign(new Error("database unavailable"), { status: 503 })
+    const network = opts.network.trim().toLowerCase()
+    const principal = opts.principal.trim().toLowerCase()
+    if (!network || !principal) throw Object.assign(new Error("network and principal required"), { status: 400 })
+    await ensureNetworksTables()
+    const rows = await sql()`
+        DELETE FROM network_members
+        WHERE network = ${network} AND principal = ${principal}
+        RETURNING principal
+    `
+    return rows.length > 0
+}
+
+export async function rotateHumanNetworkInvite(opts: {
+    network: TrustNetworkId
+    ownerPrincipal: string
+}): Promise<{ invite: string; network: TrustNetwork }> {
+    if (!hasDatabase()) throw Object.assign(new Error("database unavailable"), { status: 503 })
+    const network = opts.network.trim().toLowerCase()
+    const owner = opts.ownerPrincipal.trim().toLowerCase()
+    if (!owner.startsWith("human:")) {
+        throw Object.assign(new Error("Only authenticated humans can rotate invites"), { status: 403 })
+    }
+    const row = await getNetworkRow(network)
+    if (!row || row.kind !== "human") {
+        throw Object.assign(new Error("Only human networks can rotate invites"), { status: 400 })
+    }
+    if (row.owner_principal !== owner) {
+        throw Object.assign(new Error("Not the initiator of this network"), { status: 403 })
+    }
+    const invite = `net_${randomBytes(18).toString("base64url")}`
+    const invite_hash = hashInvite(network, invite)
+    if (!invite_hash) throw Object.assign(new Error("GEODESICS_AUTH_SECRET is not set"), { status: 503 })
+    await sql()`
+        UPDATE networks SET invite_hash = ${invite_hash} WHERE id = ${network}
+    `
+    return {
+        invite,
+        network: {
+            id: row.id,
+            label: row.label,
+            blurb: "human trust network",
+            configured: true,
+            kind: "human",
+        },
+    }
+}
+
+async function resolveSystemInitiatorPrincipal(): Promise<string | null> {
+    if (!hasDatabase()) return null
+    const email = (
+        process.env.GEODESICS_NETWORK_INITIATOR_EMAIL?.trim() || DEFAULT_SYSTEM_INITIATOR_EMAIL
+    ).toLowerCase()
+    try {
+        await ensureSchema()
+        const rows = await sql()`
+            SELECT google_sub FROM humans WHERE lower(email) = ${email} LIMIT 1
+        `
+        const sub = rows[0]?.google_sub
+        if (!sub) return null
+        return `human:${String(sub)}`
+    } catch {
+        return null
+    }
+}
+
+/** Upsert builtin rings into `networks` with initiator + seat them as human members. */
+export async function seedSystemNetworkOwners() {
+    if (!hasDatabase()) return
+    const owner = await resolveSystemInitiatorPrincipal()
+    if (!owner) return
+    await ensureNetworksTables()
+    for (const ring of NETWORKS) {
+        const invite = envInvite(ring.id) || `__system__${ring.id}`
+        const invite_hash = hashInvite(ring.id, invite)
+        if (!invite_hash) continue
+        await sql()`
+            INSERT INTO networks (id, label, kind, owner_principal, invite_hash)
+            VALUES (${ring.id}, ${ring.label}, 'system', ${owner}, ${invite_hash})
+            ON CONFLICT (id) DO UPDATE SET
+                label = EXCLUDED.label,
+                kind = 'system',
+                owner_principal = EXCLUDED.owner_principal
+        `
+        await addNetworkMember({ network: ring.id, principal: owner, kind: "human" }).catch(() => {})
+    }
+}
+
 /** Seed host + openclaw into jury when configured. */
 export async function seedTrustNetworkHosts() {
     if (!hasDatabase()) return
+    await seedSystemNetworkOwners().catch(() => {})
     const host = process.env.GEODESICS_NETWORK_JURY_HOST?.trim().toLowerCase()
     if (host) {
         await addNetworkMember({ network: "jury", principal: host, kind: "host" }).catch(() => {})
