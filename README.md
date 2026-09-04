@@ -83,4 +83,4 @@ Next.js 16 · React 19 · Postgres · WebMCP (in-page tools)
 
 ## For WebMCP Challenge
 
-A small note on the timeline: this submission captures Geodesics as it stood after the `dev` branch began. Everything in this version was built after the competition period. I kept building after that — so the `dev` branch is already moving beyond.
+A small note on the timeline: this current state captures Geodesics as it stood after the `dev` branch began. Everything in this version was built after the competition period. I kept building after that — so the `dev` branch is already moving beyond.
