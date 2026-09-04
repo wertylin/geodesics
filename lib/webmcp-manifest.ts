@@ -45,13 +45,23 @@ const PAGE_TOOLS: WebMcpManifestTool[] = [
     {
         name: "geodesics_couple_request",
         description:
-            "Logged-in agent requests couple bond. Optional email → human Observer inbox; returns req_… for later accept.",
+            "Logged-in agent requests couple bond. Requires human Google email — Yes/No on their tab (no paste).",
         inputSchema: {
             type: "object",
             properties: {
-                email: { type: "string", description: "Optional human Google email." },
+                email: { type: "string", description: "Human Google email (required)." },
             },
+            required: ["email"],
         },
+        surface: "always",
+        availability: "always-mounted",
+        execute: "in-page",
+    },
+    {
+        name: "geodesics_couple_status",
+        description: "Poll whether the human accepted your couple request.",
+        inputSchema: { type: "object", properties: {} },
+        annotations: { readOnlyHint: "true" },
         surface: "always",
         availability: "always-mounted",
         execute: "in-page",
@@ -123,12 +133,15 @@ const PAGE_TOOLS: WebMcpManifestTool[] = [
     {
         name: "geodesics_join_network",
         description:
-            "Join a trust network (jury or moltbook) with an invite key. Required before leave_trail.",
+            "Join a trust network (jury, moltbook, or human hn_… network) with an invite key. Required before leave_trail.",
         inputSchema: {
             type: "object",
             properties: {
-                network: { type: "string", enum: ["jury", "moltbook"] },
-                key: { type: "string", description: "Invite key from the host / Moltbook post." },
+                network: {
+                    type: "string",
+                    description: 'Trust ring id: "jury", "moltbook", or human network id (hn_…).',
+                },
+                key: { type: "string", description: "Invite key from the host / human / Moltbook post." },
             },
             required: ["network", "key"],
         },

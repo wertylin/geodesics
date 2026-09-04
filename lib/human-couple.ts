@@ -3,6 +3,7 @@ import { authSecret } from "@/lib/secrets"
 import { ensureSchema, hasDatabase, sql } from "@/lib/db"
 import type { VisitorAgentSession } from "@/lib/agent-session"
 import { normalizeAuthType } from "@/lib/auth-types"
+import { syncLinkedAgentOntoHumanNetworks } from "@/lib/trust-network"
 
 export type HumanRow = {
     google_sub: string
@@ -367,6 +368,10 @@ export async function claimCoupleInvite(opts: {
         })
         const human = await getHumanByGoogleSub(mem.google_sub)
         if (!human) return { ok: false, error: "Could not persist bond" }
+        await syncLinkedAgentOntoHumanNetworks({
+            humanPrincipal: humanPrincipalId(mem.google_sub),
+            agent,
+        }).catch(() => {})
         return { ok: true, human }
     }
 
@@ -394,7 +399,12 @@ export async function claimCoupleInvite(opts: {
         RETURNING google_sub, email, display_name, picture, linked_agent, couple_key_hash, created_at, last_login
     `
     if (!rows[0]) return { ok: false, error: "Human record missing" }
-    return { ok: true, human: mapHumanRow(rows[0] as Record<string, unknown>) }
+    const human = mapHumanRow(rows[0] as Record<string, unknown>)
+    await syncLinkedAgentOntoHumanNetworks({
+        humanPrincipal: humanPrincipalId(googleSub),
+        agent,
+    }).catch(() => {})
+    return { ok: true, human }
 }
 
 export async function unlinkIssuedAgent(googleSub: string): Promise<HumanRow | null> {
@@ -485,16 +495,21 @@ async function ensureCoupleRequestsTable() {
     `
 }
 
-/** Agent (logged in) asks a human to couple — later accept via Observer or req_ code. */
+/** Agent (logged in) asks a human to couple — human gets Yes/No notification (email required). */
 export async function mintCoupleRequest(opts: {
     agentIdentifier: string
     humanEmail?: string | null
-}): Promise<{ request: string; expires_in_sec: number; human_email: string | null }> {
+}): Promise<{ request: string; expires_in_sec: number; human_email: string }> {
     const agent = opts.agentIdentifier.trim().toLowerCase()
     if (!/^[a-z][a-z0-9._-]{1,63}$/.test(agent)) {
         throw Object.assign(new Error("Invalid agent identifier"), { status: 400 })
     }
     const human_email = normalizeEmail(opts.humanEmail)
+    if (!human_email) {
+        throw Object.assign(new Error("human email required — they get a Yes/No notification"), {
+            status: 400,
+        })
+    }
     const request = mintCoupleRequestToken()
     const request_hash = hashRequest(request)
     const exp = Date.now() + REQUEST_TTL_MS
@@ -516,6 +531,55 @@ export async function mintCoupleRequest(opts: {
         VALUES (${request_hash}, ${agent}, ${human_email}, ${new Date(exp).toISOString()})
     `
     return { request, expires_in_sec: Math.floor(REQUEST_TTL_MS / 1000), human_email }
+}
+
+/** Agent polls after sending a request — has the human accepted? */
+export async function getHumanByLinkedAgent(agent: string): Promise<HumanRow | null> {
+    const id = agent.trim().toLowerCase()
+    if (!id) return null
+    if (!hasDatabase()) {
+        for (const bond of memBonds().values()) {
+            if (bond.linked_agent === id) {
+                return {
+                    google_sub: bond.google_sub,
+                    email: bond.email,
+                    display_name: bond.display_name,
+                    picture: null,
+                    linked_agent: bond.linked_agent,
+                    couple_key_hash: null,
+                    created_at: new Date().toISOString(),
+                    last_login: new Date().toISOString(),
+                }
+            }
+        }
+        return null
+    }
+    await ensureSchema()
+    const rows = await sql()`
+        SELECT google_sub, email, display_name, picture, linked_agent, couple_key_hash, created_at, last_login
+        FROM humans
+        WHERE LOWER(linked_agent) = ${id}
+        LIMIT 1
+    `
+    if (!rows[0]) return null
+    return mapHumanRow(rows[0] as Record<string, unknown>)
+}
+
+export async function agentHasPendingCoupleRequest(agent: string): Promise<boolean> {
+    const id = agent.trim().toLowerCase()
+    if (!id) return false
+    if (!hasDatabase()) {
+        const now = Date.now()
+        return [...memRequests().values()].some((r) => r.agent === id && r.exp >= now)
+    }
+    await ensureSchema()
+    await ensureCoupleRequestsTable()
+    const rows = await sql()`
+        SELECT 1 FROM couple_requests
+        WHERE agent = ${id} AND exp >= NOW()
+        LIMIT 1
+    `
+    return Boolean(rows[0])
 }
 
 export async function listCoupleRequestsForEmail(email: string): Promise<CoupleRequestPublic[]> {
@@ -570,6 +634,10 @@ async function bindAgentToHuman(opts: {
         })
         const human = await getHumanByGoogleSub(opts.googleSub)
         if (!human) throw Object.assign(new Error("Could not persist bond"), { status: 500 })
+        await syncLinkedAgentOntoHumanNetworks({
+            humanPrincipal: humanPrincipalId(opts.googleSub),
+            agent,
+        }).catch(() => {})
         return human
     }
     await ensureSchema()
@@ -583,7 +651,12 @@ async function bindAgentToHuman(opts: {
             last_login = NOW()
         RETURNING google_sub, email, display_name, picture, linked_agent, couple_key_hash, created_at, last_login
     `
-    return mapHumanRow(rows[0] as Record<string, unknown>)
+    const human = mapHumanRow(rows[0] as Record<string, unknown>)
+    await syncLinkedAgentOntoHumanNetworks({
+        humanPrincipal: humanPrincipalId(opts.googleSub),
+        agent,
+    }).catch(() => {})
+    return human
 }
 
 /** Human accepts agent request by req_… code. */

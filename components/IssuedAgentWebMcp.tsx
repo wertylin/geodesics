@@ -10,6 +10,7 @@ import {
     dispatchAgentNavigate,
     dispatchOpenAgentLogin,
     GEODESICS_CONNECTION_KEY,
+    hydrateVisitorSession,
     readVisitorAgentSession,
     visitorSessionFromLoginPayload,
     type AgentNavigateDetail,
@@ -195,15 +196,16 @@ export function IssuedAgentWebMcp() {
         registerPageWebMcpTool({
             name: "geodesics_couple_request",
             description:
-                "Logged-in agent requests a couple bond with a human (sonradan bağ). Optional email queues it in their Observer; always returns req_… they can paste later.",
+                "Logged-in agent requests a couple bond. Requires human Google email — they get a Yes/No notification on their tab (no paste codes).",
             inputSchema: {
                 type: "object",
                 properties: {
                     email: {
                         type: "string",
-                        description: "Optional human Google email to notify in Observer.",
+                        description: "Human Google email to notify (required).",
                     },
                 },
+                required: ["email"],
             },
             execute: async (input) => {
                 const visitor = readVisitorAgentSession()
@@ -215,14 +217,17 @@ export function IssuedAgentWebMcp() {
                     })
                 }
                 const email = String(input.email ?? "").trim()
+                if (!email.includes("@")) {
+                    return toWebMcpToolText({
+                        success: false,
+                        error: "email required — human gets Yes/No on their tab",
+                    })
+                }
                 const res = await fetch("/api/auth/couple", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     credentials: "include",
-                    body: JSON.stringify({
-                        action: "request",
-                        email: email || undefined,
-                    }),
+                    body: JSON.stringify({ action: "request", email }),
                 })
                 const data = (await res.json().catch(() => ({}))) as Record<string, unknown>
                 if (!res.ok) {
@@ -233,10 +238,55 @@ export function IssuedAgentWebMcp() {
                 }
                 return toWebMcpToolText({
                     success: true,
-                    request: data.request,
+                    awaiting: true,
+                    human_email: data.human_email ?? email,
                     expires_in_sec: data.expires_in_sec,
-                    human_email: data.human_email ?? null,
-                    hint: typeof data.hint === "string" ? data.hint : "Human accepts in Observer.",
+                    hint:
+                        typeof data.hint === "string"
+                            ? data.hint
+                            : "Waiting for human Yes/No. Poll with geodesics_couple_status.",
+                    next: ["geodesics_couple_status"],
+                })
+            },
+        })
+
+        registerPageWebMcpTool({
+            name: "geodesics_couple_status",
+            description:
+                "Poll whether the human accepted your couple request (Yes/No). Updates session when linked.",
+            inputSchema: { type: "object", properties: {} },
+            annotations: { readOnlyHint: "true" },
+            execute: async () => {
+                const visitor = readVisitorAgentSession()
+                if (!visitor || visitor.auth_type !== "external_agent") {
+                    return toWebMcpToolText({
+                        success: false,
+                        error: "Log in as agent first.",
+                    })
+                }
+                const res = await fetch("/api/auth/couple", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    credentials: "include",
+                    body: JSON.stringify({ action: "request_status" }),
+                })
+                const data = (await res.json().catch(() => ({}))) as Record<string, unknown>
+                if (!res.ok) {
+                    return toWebMcpToolText({
+                        success: false,
+                        error: typeof data.error === "string" ? data.error : "status failed",
+                    })
+                }
+                if (data.linked && data.session && typeof data.session === "object") {
+                    const next = visitorSessionFromLoginPayload(data.session as Record<string, unknown>)
+                    if (next) hydrateVisitorSession(next)
+                }
+                return toWebMcpToolText({
+                    success: true,
+                    linked: Boolean(data.linked),
+                    awaiting: Boolean(data.awaiting),
+                    human: data.human ?? null,
+                    hint: typeof data.hint === "string" ? data.hint : undefined,
                 })
             },
         })
@@ -355,12 +405,15 @@ export function IssuedAgentWebMcp() {
         registerPageWebMcpTool({
             name: "geodesics_join_network",
             description:
-                "Join a trust network with an invite key (jury or moltbook). Required before leave_trail.",
+                "Join a trust network with an invite key (jury, moltbook, or human hn_… network). Required before leave_trail.",
             inputSchema: {
                 type: "object",
                 properties: {
-                    network: { type: "string", enum: ["jury", "moltbook"], description: "Trust ring id." },
-                    key: { type: "string", description: "Invite key from the host / post." },
+                    network: {
+                        type: "string",
+                        description: 'Trust ring id: "jury", "moltbook", or human network id (hn_…).',
+                    },
+                    key: { type: "string", description: "Invite key from the host / human / post." },
                 },
                 required: ["network", "key"],
             },

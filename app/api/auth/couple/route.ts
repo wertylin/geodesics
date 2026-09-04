@@ -8,8 +8,10 @@ import {
 import {
     acceptCoupleRequest,
     acceptCoupleRequestByAgent,
+    agentHasPendingCoupleRequest,
     claimCoupleInvite,
     getHumanByGoogleSub,
+    getHumanByLinkedAgent,
     listCoupleRequestsForEmail,
     mintCoupleInvite,
     mintCoupleRequest,
@@ -27,7 +29,7 @@ export async function OPTIONS(req: NextRequest) {
 /**
  * Couple bond without sharing agent secrets.
  * Human: invite | accept | reject | unlink | pending
- * Agent:  claim | request
+ * Agent:  claim | request | request_status
  */
 export async function POST(req: NextRequest) {
     const cors = agentCorsHeaders(req)
@@ -51,7 +53,7 @@ export async function POST(req: NextRequest) {
     const action = typeof body.action === "string" ? body.action : "invite"
 
     // ── agent paths ──
-    if (action === "claim" || action === "request") {
+    if (action === "claim" || action === "request" || action === "request_status") {
         if (visitor.auth_type !== "external_agent") {
             return NextResponse.json(
                 { error: "Log in as the issued agent first." },
@@ -69,12 +71,10 @@ export async function POST(req: NextRequest) {
                 return NextResponse.json(
                     {
                         success: true,
-                        request: minted.request,
+                        awaiting: true,
                         expires_in_sec: minted.expires_in_sec,
                         human_email: minted.human_email,
-                        hint: minted.human_email
-                            ? `Request queued for ${minted.human_email}. They accept in Observer — or hand them: ${minted.request}`
-                            : `Hand req to human. They accept in Observer: execute accept with request "${minted.request.slice(0, 12)}…"`,
+                        hint: `Notification sent to ${minted.human_email}. Waiting for Yes/No on their tab.`,
                     },
                     { headers: cors }
                 )
@@ -84,6 +84,38 @@ export async function POST(req: NextRequest) {
                     typeof err === "object" && err && "status" in err ? Number((err as { status: number }).status) : 500
                 return NextResponse.json({ success: false, error: msg }, { status, headers: cors })
             }
+        }
+
+        if (action === "request_status") {
+            const human = await getHumanByLinkedAgent(visitor.identifier)
+            if (human) {
+                const session = {
+                    ...visitor,
+                    coupled_human: human.email || human.display_name || human.google_sub,
+                    auth_type: "external_agent" as const,
+                }
+                const res = NextResponse.json(
+                    {
+                        success: true,
+                        linked: true,
+                        awaiting: false,
+                        human: {
+                            email: human.email,
+                            display_name: human.display_name,
+                        },
+                        session,
+                        hint: "Couple bond live. You can leave trails after joining a trust network.",
+                    },
+                    { headers: cors }
+                )
+                res.headers.append("Set-Cookie", visitorCookieHeader(session, req))
+                return res
+            }
+            const awaiting = await agentHasPendingCoupleRequest(visitor.identifier)
+            return NextResponse.json(
+                { success: true, linked: false, awaiting },
+                { headers: cors }
+            )
         }
 
         const invite = typeof body.invite === "string" ? body.invite : ""

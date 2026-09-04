@@ -8,9 +8,11 @@ import {
 } from "@/lib/jury"
 import {
     addNetworkMember,
-    isTrustNetworkId,
+    isBuiltinTrustNetworkId,
+    isNetworkIdFormat,
     joinNetworkWithKey,
-    listTrustNetworks,
+    listAllTrustNetworks,
+    memberKindForAuth,
     networksForPrincipal,
     seedTrustNetworkHosts,
 } from "@/lib/trust-network"
@@ -24,17 +26,15 @@ export function OPTIONS(req: NextRequest) {
 export async function GET(req: NextRequest) {
     const cors = agentCorsHeaders(req)
     await Promise.all([seedTrustNetworkHosts().catch(() => {}), seedJury().catch(() => {})])
+    const networks = await listAllTrustNetworks()
     const gate = requireVisitor(req)
     if (gate instanceof NextResponse) {
-        return NextResponse.json(
-            { networks: listTrustNetworks(), member: null, memberships: [] },
-            { headers: cors }
-        )
+        return NextResponse.json({ networks, member: null, memberships: [] }, { headers: cors })
     }
     const memberships = await networksForPrincipal(gate.visitor.identifier)
     return NextResponse.json(
         {
-            networks: listTrustNetworks(),
+            networks,
             member: gate.visitor.identifier,
             memberships,
         },
@@ -56,22 +56,32 @@ export async function POST(req: NextRequest) {
 
     const network = typeof body.network === "string" ? body.network.trim().toLowerCase() : ""
     const key = typeof body.key === "string" ? body.key : ""
-    if (!isTrustNetworkId(network)) {
+    if (!isNetworkIdFormat(network)) {
         return NextResponse.json(
-            { error: 'network must be "jury" or "moltbook"' },
+            { error: 'network must be "jury", "moltbook", or a human network id (hn_…)' },
             { status: 400, headers: cors }
         )
     }
 
     await Promise.all([seedTrustNetworkHosts().catch(() => {}), seedJury().catch(() => {})])
 
+    const kind = memberKindForAuth(gate.visitor.auth_type)
+
     try {
         const member = await joinNetworkWithKey({
             network,
             key,
             principal: gate.visitor.identifier,
-            kind: "agent",
+            kind,
         })
+        // Human joins → also seat their linked agent on the same ring.
+        if (kind === "human" && gate.visitor.linked_agent) {
+            await addNetworkMember({
+                network,
+                principal: gate.visitor.linked_agent,
+                kind: "agent",
+            }).catch(() => {})
+        }
         const memberships = await networksForPrincipal(gate.visitor.identifier)
         return NextResponse.json(
             {
@@ -84,7 +94,7 @@ export async function POST(req: NextRequest) {
         )
     } catch (error) {
         // Jury ring: desk codes are also valid invites (per-juror).
-        if (network === "jury") {
+        if (isBuiltinTrustNetworkId(network) && network === "jury") {
             const desk = await matchJuryCode(key)
             if (desk.ok) {
                 await addNetworkMember({
@@ -95,8 +105,15 @@ export async function POST(req: NextRequest) {
                 const member = await addNetworkMember({
                     network: "jury",
                     principal: gate.visitor.identifier,
-                    kind: "agent",
+                    kind,
                 })
+                if (kind === "human" && gate.visitor.linked_agent) {
+                    await addNetworkMember({
+                        network: "jury",
+                        principal: gate.visitor.linked_agent,
+                        kind: "agent",
+                    }).catch(() => {})
+                }
                 const memberships = await networksForPrincipal(gate.visitor.identifier)
                 const res = NextResponse.json(
                     {
