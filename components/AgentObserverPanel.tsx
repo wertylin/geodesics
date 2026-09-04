@@ -15,7 +15,7 @@ import {
     type ActivityEvent,
 } from "@/lib/agent-activity"
 
-type NetworkId = "jury" | "moltbook"
+type NetworkId = string
 
 type ObserverState = {
     session: VisitorAgentSession | null
@@ -29,10 +29,10 @@ function nextSteps(session: VisitorAgentSession | null, memberships: NetworkId[]
         return ["auth terminal", "geodesics_join_network", "geodesics_leave_trail"]
     }
     if (session.auth_type === "human_couple" && !session.linked_agent) {
-        return ["accept agent request / mint invite", "geodesics_leave_trail"]
+        return ["await agent Yes/No / mint invite", "start human trust network", "geodesics_leave_trail"]
     }
     if (session.auth_type === "external_agent" && !session.coupled_human) {
-        return ["geodesics_couple_request", "geodesics_join_network", "geodesics_leave_trail"]
+        return ["geodesics_couple_request (email)", "geodesics_couple_status", "geodesics_join_network"]
     }
     if (!memberships.length) {
         return ["geodesics_join_network", "geodesics_leave_trail", "geodesics_list_trails"]
@@ -54,7 +54,6 @@ function CoupleLinkBox({
     const [invite, setInvite] = useState<string | null>(null)
     const [expiresIn, setExpiresIn] = useState<number | null>(null)
     const [pending, setPending] = useState<PendingReq[]>([])
-    const [reqCode, setReqCode] = useState("")
 
     const loadPending = async () => {
         try {
@@ -72,7 +71,13 @@ function CoupleLinkBox({
     }
 
     useEffect(() => {
-        if (!session.linked_agent) void loadPending()
+        if (session.linked_agent) {
+            setPending([])
+            return
+        }
+        void loadPending()
+        const id = window.setInterval(() => void loadPending(), 2500)
+        return () => window.clearInterval(id)
     }, [session.identifier, session.linked_agent])
 
     const mint = async () => {
@@ -100,34 +105,7 @@ function CoupleLinkBox({
         }
     }
 
-    const refresh = async () => {
-        setBusy(true)
-        setError(null)
-        try {
-            const res = await fetch("/api/auth/me", { credentials: "include", cache: "no-store" })
-            const data = (await res.json().catch(() => ({}))) as {
-                session?: Record<string, unknown> | null
-                error?: string
-            }
-            const next = data.session ? visitorSessionFromLoginPayload(data.session) : null
-            if (!next) throw new Error("no session")
-            hydrateVisitorSession(next)
-            onSession(next)
-            if (next.linked_agent) {
-                setInvite(null)
-                setExpiresIn(null)
-                setPending([])
-            } else {
-                await loadPending()
-            }
-        } catch (err) {
-            setError(err instanceof Error ? err.message : "refresh failed")
-        } finally {
-            setBusy(false)
-        }
-    }
-
-    const accept = async (payload: { request?: string; agent?: string }) => {
+    const accept = async (agent: string) => {
         setBusy(true)
         setError(null)
         try {
@@ -135,7 +113,7 @@ function CoupleLinkBox({
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 credentials: "include",
-                body: JSON.stringify({ action: "accept", ...payload }),
+                body: JSON.stringify({ action: "accept", agent }),
             })
             const data = (await res.json().catch(() => ({}))) as {
                 error?: string
@@ -148,7 +126,6 @@ function CoupleLinkBox({
                 onSession(next)
             }
             setPending([])
-            setReqCode("")
             setInvite(null)
         } catch (err) {
             setError(err instanceof Error ? err.message : "accept failed")
@@ -228,55 +205,31 @@ function CoupleLinkBox({
             <span className="couple-link-label">couple</span>
             {pending.length ? (
                 <div className="couple-pending">
-                    <small className="muted">incoming agent requests</small>
+                    <small className="muted">incoming · yes/no also on overlay</small>
                     <ul>
                         {pending.map((p) => (
                             <li key={p.agent}>
                                 <strong>{p.agent}</strong>
                                 <span className="couple-pending-actions">
-                                    <button
-                                        type="button"
-                                        disabled={busy}
-                                        onClick={() => void accept({ agent: p.agent })}
-                                    >
-                                        accept
+                                    <button type="button" disabled={busy} onClick={() => void accept(p.agent)}>
+                                        yes
                                     </button>
                                     <button type="button" disabled={busy} onClick={() => void reject(p.agent)}>
-                                        reject
+                                        no
                                     </button>
                                 </span>
                             </li>
                         ))}
                     </ul>
                 </div>
-            ) : null}
-            <p className="couple-hint">
-                Agent can request first (<code>req_…</code>), or you mint an invite for them.
-            </p>
-            <label className="couple-req-paste">
-                <span>req_…</span>
-                <input
-                    value={reqCode}
-                    onChange={(e) => setReqCode(e.target.value)}
-                    placeholder="paste agent request"
-                    spellCheck={false}
-                    autoComplete="off"
-                />
-                <button
-                    type="button"
-                    className="observer-login"
-                    disabled={busy || !reqCode.trim()}
-                    onClick={() => void accept({ request: reqCode.trim() })}
-                >
-                    accept request →
-                </button>
-            </label>
+            ) : (
+                <p className="couple-hint">
+                    Waiting for an agent request to your email — you&apos;ll get a Yes/No prompt. Or mint an invite.
+                </p>
+            )}
             <div className="couple-actions">
                 <button type="button" className="observer-login" disabled={busy} onClick={() => void mint()}>
                     {busy ? "…" : invite ? "re-mint invite →" : "mint invite →"}
-                </button>
-                <button type="button" className="observer-login" disabled={busy} onClick={() => void refresh()}>
-                    refresh →
                 </button>
             </div>
             {invite ? (
@@ -298,8 +251,45 @@ function AgentCoupleRequestBox({ session }: { session: VisitorAgentSession }) {
     const [busy, setBusy] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const [email, setEmail] = useState("")
-    const [request, setRequest] = useState<string | null>(null)
+    const [awaiting, setAwaiting] = useState(false)
+    const [target, setTarget] = useState<string | null>(null)
     const [expiresIn, setExpiresIn] = useState<number | null>(null)
+
+    useEffect(() => {
+        if (!awaiting || session.coupled_human) return
+        let cancelled = false
+        const tick = async () => {
+            try {
+                const res = await fetch("/api/auth/couple", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    credentials: "include",
+                    body: JSON.stringify({ action: "request_status" }),
+                })
+                const data = (await res.json().catch(() => ({}))) as {
+                    linked?: boolean
+                    awaiting?: boolean
+                    session?: Record<string, unknown>
+                }
+                if (cancelled || !res.ok) return
+                if (data.linked && data.session) {
+                    const next = visitorSessionFromLoginPayload(data.session)
+                    if (next) hydrateVisitorSession(next)
+                    setAwaiting(false)
+                } else if (data.awaiting === false) {
+                    setAwaiting(false)
+                }
+            } catch {
+                /* ignore */
+            }
+        }
+        void tick()
+        const id = window.setInterval(() => void tick(), 2500)
+        return () => {
+            cancelled = true
+            window.clearInterval(id)
+        }
+    }, [awaiting, session.coupled_human])
 
     if (session.coupled_human) {
         return (
@@ -321,16 +311,18 @@ function AgentCoupleRequestBox({ session }: { session: VisitorAgentSession }) {
                 credentials: "include",
                 body: JSON.stringify({
                     action: "request",
-                    email: email.trim() || undefined,
+                    email: email.trim(),
                 }),
             })
             const data = (await res.json().catch(() => ({}))) as {
                 error?: string
-                request?: string
+                human_email?: string
                 expires_in_sec?: number
+                awaiting?: boolean
             }
             if (!res.ok) throw new Error(data.error || "request failed")
-            setRequest(data.request ?? null)
+            setAwaiting(true)
+            setTarget(data.human_email ?? email.trim())
             setExpiresIn(typeof data.expires_in_sec === "number" ? data.expires_in_sec : null)
         } catch (err) {
             setError(err instanceof Error ? err.message : "request failed")
@@ -342,30 +334,46 @@ function AgentCoupleRequestBox({ session }: { session: VisitorAgentSession }) {
     return (
         <div className="couple-link">
             <span className="couple-link-label">request couple</span>
-            <p className="couple-hint">
-                Already logged in? Ask a human to link later — they&apos;ll see it in Observer or paste{" "}
-                <code>req_…</code>.
-            </p>
-            <label className="couple-req-paste">
-                <span>email</span>
-                <input
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="optional · human@…"
-                    spellCheck={false}
-                    autoComplete="email"
-                />
-            </label>
-            <button type="button" className="observer-login" disabled={busy} onClick={() => void send()}>
-                {busy ? "…" : request ? "re-send request →" : "send couple request →"}
-            </button>
-            {request ? (
-                <pre className="couple-key-out">{`request (${expiresIn ?? "?"}s)
-${request}
-
-human: Observer → accept
-or paste req_…`}</pre>
-            ) : null}
+            {awaiting ? (
+                <>
+                    <p className="couple-hint">
+                        awaiting · <em>{target}</em>
+                        {expiresIn ? ` · ${expiresIn}s window` : ""} — Yes/No on their tab
+                    </p>
+                    <button
+                        type="button"
+                        className="observer-login"
+                        disabled={busy}
+                        onClick={() => void send()}
+                    >
+                        re-notify →
+                    </button>
+                </>
+            ) : (
+                <>
+                    <p className="couple-hint">
+                        Send to their Google email — they get a Yes/No notification (no paste codes).
+                    </p>
+                    <label className="couple-req-paste">
+                        <span>email</span>
+                        <input
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                            placeholder="human@…"
+                            spellCheck={false}
+                            autoComplete="email"
+                        />
+                    </label>
+                    <button
+                        type="button"
+                        className="observer-login"
+                        disabled={busy || !email.trim().includes("@")}
+                        onClick={() => void send()}
+                    >
+                        {busy ? "…" : "send couple request →"}
+                    </button>
+                </>
+            )}
             {error ? <small className="couple-err">{error}</small> : null}
         </div>
     )
@@ -382,8 +390,17 @@ export function AgentObserverPanel({ compact = false }: { compact?: boolean }) {
         setState((s) => ({ ...s, session: readVisitorAgentSession() }))
 
         const onSession = (e: Event) => {
-            const next = (e as CustomEvent<VisitorAgentSession | null>).detail ?? null
+            const next = (e as CustomEvent<VisitorAgentSession | null>).detail ?? readVisitorAgentSession()
             setState((s) => ({ ...s, session: next }))
+            void fetch("/api/network/join", { credentials: "include" })
+                .then((r) => r.json())
+                .then((d: { memberships?: NetworkId[] }) => {
+                    setState((s) => ({
+                        ...s,
+                        memberships: Array.isArray(d.memberships) ? d.memberships : s.memberships,
+                    }))
+                })
+                .catch(() => {})
         }
         const onActivity = (e: Event) => {
             const detail = (e as CustomEvent<ActivityEvent>).detail

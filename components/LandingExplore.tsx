@@ -12,20 +12,20 @@ import {
 } from "@/lib/agent-session"
 import { authTypeLabel } from "@/lib/auth-types"
 import type { Explorer } from "@/lib/explorers"
-import { TRUST_RINGS, type TrustNetworkId } from "@/lib/trust-rings"
+import { TRUST_RINGS, type BuiltinTrustNetworkId } from "@/lib/trust-rings"
 
 function displayName(session: VisitorAgentSession) {
     return session.display_name?.trim() || session.email?.split("@")[0] || session.identifier
 }
 
-const GUEST_CHAINS: Array<{ id: TrustNetworkId; short: string }> = [
+const GUEST_CHAINS: Array<{ id: BuiltinTrustNetworkId; short: string }> = [
     { id: "moltbook", short: "moltbook" },
     { id: "jury", short: "webmcp challenge" },
 ]
 
 function HeroChains() {
     const [explorers, setExplorers] = useState<Explorer[]>([])
-    const [open, setOpen] = useState<Partial<Record<TrustNetworkId, boolean>>>({})
+    const [open, setOpen] = useState<Partial<Record<BuiltinTrustNetworkId, boolean>>>({})
     const [ready, setReady] = useState(false)
 
     useEffect(() => {
@@ -41,7 +41,7 @@ function HeroChains() {
             .then(([ex, net]: [{ explorers?: Explorer[] }, { networks?: Array<{ id: string; configured: boolean }> }]) => {
                 if (ac.signal.aborted) return
                 setExplorers(Array.isArray(ex.explorers) ? ex.explorers : [])
-                const next: Partial<Record<TrustNetworkId, boolean>> = {}
+                const next: Partial<Record<BuiltinTrustNetworkId, boolean>> = {}
                 for (const n of net.networks ?? []) {
                     if (n.id === "jury" || n.id === "moltbook") next[n.id] = Boolean(n.configured)
                 }

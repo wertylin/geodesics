@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { AgentActivityTicker } from "@/components/AgentActivityTicker"
 import { AgentObserverPanel } from "@/components/AgentObserverPanel"
 import { AuthTerminal } from "@/components/AuthTerminal"
+import { CoupleRequestConsent } from "@/components/CoupleRequestConsent"
 import { TrustNetworkPanel } from "@/components/LiveNetwork"
 import {
     AGENT_OPEN_LOGIN_EVENT,
@@ -72,6 +73,8 @@ export function AgentLiveChrome() {
             data-open={open ? "true" : "false"}
             data-auth={authed ? "true" : "false"}
         >
+            {authed ? <CoupleRequestConsent /> : null}
+
             <button
                 type="button"
                 className="agent-live-toggle"

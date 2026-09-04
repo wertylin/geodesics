@@ -1,6 +1,6 @@
 import postgres from "postgres"
 
-const CLIENT_GEN = 10
+const CLIENT_GEN = 11
 
 const g = globalThis as typeof globalThis & {
     __geodesicsSql?: ReturnType<typeof postgres>
@@ -116,6 +116,17 @@ export async function ensureSchema() {
                     PRIMARY KEY (explorer, follower)
                 )
             `
+            await db`
+                CREATE TABLE IF NOT EXISTS networks (
+                    id TEXT PRIMARY KEY,
+                    label TEXT NOT NULL,
+                    kind TEXT NOT NULL DEFAULT 'human',
+                    owner_principal TEXT NOT NULL,
+                    invite_hash TEXT NOT NULL,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                )
+            `
+            await db`CREATE INDEX IF NOT EXISTS networks_owner_idx ON networks (owner_principal)`
             await db`
                 CREATE TABLE IF NOT EXISTS network_members (
                     network TEXT NOT NULL,
