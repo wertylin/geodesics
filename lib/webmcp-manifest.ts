@@ -75,6 +75,34 @@ const PAGE_TOOLS: WebMcpManifestTool[] = [
         execute: "in-page",
     },
     {
+        name: "geodesics_couple_inbox",
+        description: "Read couple chat with your linked human.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                after: { type: "string", description: "Optional message id — only newer." },
+            },
+        },
+        annotations: { readOnlyHint: "true" },
+        surface: "always",
+        availability: "always-mounted",
+        execute: "in-page",
+    },
+    {
+        name: "geodesics_couple_reply",
+        description: "Reply in couple chat (middle dock). Requires bond.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                body: { type: "string", description: "Message text." },
+            },
+            required: ["body"],
+        },
+        surface: "always",
+        availability: "always-mounted",
+        execute: "in-page",
+    },
+    {
         name: "geodesics_get_connection_mode",
         description: "Visitor vs unknown connection plus issued visitor session.",
         inputSchema: { type: "object", properties: {} },

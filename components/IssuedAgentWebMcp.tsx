@@ -36,6 +36,7 @@ export function IssuedAgentWebMcp() {
     }, [router])
 
     useEffect(() => {
+        const mountTools = () => {
         registerPageWebMcpTool({
             name: "geodesics_agent_login",
             description:
@@ -311,6 +312,76 @@ export function IssuedAgentWebMcp() {
         })
 
         registerPageWebMcpTool({
+            name: "geodesics_couple_inbox",
+            description:
+                "Read couple chat with your linked human (middle dock CHAT panel). Requires bond.",
+            inputSchema: {
+                type: "object",
+                properties: {
+                    after: { type: "string", description: "Optional message id — only newer messages." },
+                },
+            },
+            annotations: { readOnlyHint: "true" },
+            execute: async (input) => {
+                const visitor = readVisitorAgentSession()
+                if (!visitor) {
+                    return toWebMcpToolText({ success: false, error: "Login first." })
+                }
+                const after = String(input.after ?? "").trim()
+                const qs = after ? `?after=${encodeURIComponent(after)}` : ""
+                const res = await fetch(`/api/couple/chat${qs}`, { credentials: "include", cache: "no-store" })
+                const data = (await res.json().catch(() => ({}))) as Record<string, unknown>
+                if (!res.ok) {
+                    return toWebMcpToolText({
+                        success: false,
+                        error: typeof data.error === "string" ? data.error : "inbox failed",
+                    })
+                }
+                return toWebMcpToolText({ success: true, ...data })
+            },
+        })
+
+        registerPageWebMcpTool({
+            name: "geodesics_couple_reply",
+            description: "Send a chat message to your coupled human (appears in the middle CHAT panel).",
+            inputSchema: {
+                type: "object",
+                properties: {
+                    body: { type: "string", description: "Message text." },
+                    message: { type: "string", description: "Alias for body." },
+                },
+                required: ["body"],
+            },
+            execute: async (input) => {
+                const visitor = readVisitorAgentSession()
+                if (!visitor || visitor.auth_type !== "external_agent") {
+                    return toWebMcpToolText({
+                        success: false,
+                        error: "Log in as the linked agent first.",
+                    })
+                }
+                const body = String(input.body ?? input.message ?? "").trim()
+                if (!body) {
+                    return toWebMcpToolText({ success: false, error: "body required" })
+                }
+                const res = await fetch("/api/couple/chat", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    credentials: "include",
+                    body: JSON.stringify({ body }),
+                })
+                const data = (await res.json().catch(() => ({}))) as Record<string, unknown>
+                if (!res.ok) {
+                    return toWebMcpToolText({
+                        success: false,
+                        error: typeof data.error === "string" ? data.error : "reply failed",
+                    })
+                }
+                return toWebMcpToolText({ success: true, ...data })
+            },
+        })
+
+        registerPageWebMcpTool({
             name: "geodesics_get_connection_mode",
             description: "Visitor vs unknown connection plus issued visitor session.",
             inputSchema: { type: "object", properties: {} },
@@ -572,11 +643,17 @@ export function IssuedAgentWebMcp() {
                 return toWebMcpToolText({ success: true, ...data })
             },
         })
-    }, [])
+        }
 
-    useEffect(() => {
+        mountTools()
+        window.__geodesicsEnsurePageTools = mountTools
         window.__geodesicsExecuteTool = executePageWebMcpTool
         window.__geodesicsListTools = listPageWebMcpTools
+        return () => {
+            if (window.__geodesicsEnsurePageTools === mountTools) {
+                delete window.__geodesicsEnsurePageTools
+            }
+        }
     }, [])
 
     return null

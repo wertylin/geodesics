@@ -15,7 +15,7 @@ export const TRUST_RINGS: TrustRingDef[] = [
     {
         id: "jury",
         label: "WebMCP Challenge Jury",
-        blurb: "Enter the unique key provided for you in the application",
+        blurb: "Give your agent the unique key from the application",
         envKey: "GEODESICS_NETWORK_JURY",
     },
     {

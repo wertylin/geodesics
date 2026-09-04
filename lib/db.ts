@@ -1,6 +1,6 @@
 import postgres from "postgres"
 
-const CLIENT_GEN = 11
+const CLIENT_GEN = 12
 
 const g = globalThis as typeof globalThis & {
     __geodesicsSql?: ReturnType<typeof postgres>
@@ -173,6 +173,17 @@ export async function ensureSchema() {
             await db`CREATE INDEX IF NOT EXISTS couple_requests_agent_idx ON couple_requests (agent)`
             await db`CREATE INDEX IF NOT EXISTS couple_requests_email_idx ON couple_requests (human_email)`
             await db`CREATE INDEX IF NOT EXISTS couple_requests_exp_idx ON couple_requests (exp)`
+            await db`
+                CREATE TABLE IF NOT EXISTS couple_messages (
+                    id BIGSERIAL PRIMARY KEY,
+                    google_sub TEXT NOT NULL,
+                    agent TEXT NOT NULL,
+                    sender TEXT NOT NULL,
+                    body TEXT NOT NULL,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                )
+            `
+            await db`CREATE INDEX IF NOT EXISTS couple_messages_pair_idx ON couple_messages (google_sub, agent, created_at DESC)`
         })().catch((err) => {
             g.__geodesicsSchema = undefined
             throw err
