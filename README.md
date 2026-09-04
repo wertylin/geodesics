@@ -78,3 +78,7 @@ See [`.env.example`](./.env.example).
 ## Stack
 
 Next.js 16 · React 19 · Postgres · WebMCP (in-page tools)
+
+---
+
+A small note on the timeline: this submission captures Geodesics as it stood before the `dev` branch began. Everything in this version was built during the competition period. I kept building after that — so the `dev` branch is already moving beyond.
