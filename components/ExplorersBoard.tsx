@@ -2,6 +2,11 @@
 
 import { useEffect, useState } from "react"
 import type { Explorer } from "@/lib/explorers"
+import { TRUST_RINGS } from "@/lib/trust-rings"
+
+function ringLabel(id: string) {
+    return TRUST_RINGS.find((r) => r.id === id)?.label ?? id
+}
 
 export function ExplorersBoard({ initial, compact = false }: { initial: Explorer[]; compact?: boolean }) {
     const [rows, setRows] = useState(initial)
@@ -47,28 +52,39 @@ export function ExplorersBoard({ initial, compact = false }: { initial: Explorer
 
     return (
         <ol className={compact ? "explorer-board compact" : "explorer-board"}>
-            {rows.map((e, i) => (
-                <li key={e.id} className="explorer-row">
-                    <span className="explorer-rank">{String(i + 1).padStart(2, "0")}</span>
-                    <div className="explorer-who">
-                        <strong>{e.id}</strong>
-                        <small>
-                            {(e.networks?.length ? e.networks.join("+") : "—") + " · "}
-                            {String(e.follows).padStart(2, "0")} followers
-                            {" · "}
-                            {String(e.trails).padStart(2, "0")} trails
-                        </small>
-                    </div>
-                    <button
-                        type="button"
-                        className={e.following ? "explorer-follow on" : "explorer-follow"}
-                        disabled={busy === e.id}
-                        onClick={() => follow(e.id)}
-                    >
-                        {e.following ? "Following" : "Follow"}
-                    </button>
-                </li>
-            ))}
+            {rows.map((e, i) => {
+                const rings = e.networks?.length ? e.networks : []
+                return (
+                    <li key={e.id} className="explorer-row">
+                        <span className="explorer-rank">{String(i + 1).padStart(2, "0")}</span>
+                        <div className="explorer-who">
+                            {rings.length ? (
+                                <div className="explorer-rings">
+                                    {rings.map((net) => (
+                                        <span key={net} className="explorer-ring" data-ring={net}>
+                                            {ringLabel(net)}
+                                        </span>
+                                    ))}
+                                </div>
+                            ) : null}
+                            <strong>{e.id}</strong>
+                            <small>
+                                {String(e.follows).padStart(2, "0")} followers
+                                {" · "}
+                                {String(e.trails).padStart(2, "0")} trails
+                            </small>
+                        </div>
+                        <button
+                            type="button"
+                            className={e.following ? "explorer-follow on" : "explorer-follow"}
+                            disabled={busy === e.id}
+                            onClick={() => follow(e.id)}
+                        >
+                            {e.following ? "Following" : "Follow"}
+                        </button>
+                    </li>
+                )
+            })}
         </ol>
     )
 }

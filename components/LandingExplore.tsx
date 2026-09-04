@@ -1,11 +1,11 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { flushSync } from "react-dom"
+import { useRouter } from "next/navigation"
 import { LiveRail, LiveGlobe } from "@/components/LiveNetwork"
-import { LiveMapExplorer } from "@/components/LiveMapExplorer"
 import {
     AGENT_SESSION_EVENT,
+    dispatchOpenAgentLogin,
     markVisitorAsAgent,
     markVisitorAsHuman,
     readVisitorAgentSession,
@@ -35,29 +35,29 @@ function AgentIcon() {
     )
 }
 
-export const EXPLORE_MAP_EVENT = "geodesics:explore-map"
-
-function canViewTransition() {
-    return "startViewTransition" in document && !window.matchMedia("(prefers-reduced-motion: reduce)").matches
-}
-
 export function LandingExplore() {
-    const [open, setOpen] = useState(false)
+    const router = useRouter()
     const [brief, setBrief] = useState(false)
     const [mode, setMode] = useState<ConnectionMode>(null)
     const [session, setSession] = useState<VisitorAgentSession | null>(null)
-    const openRef = useRef(false)
-    openRef.current = open
+    const acceptLoginNav = useRef(false)
 
     useEffect(() => {
         setSession(readVisitorAgentSession())
+        // Ignore the initial session hydrate — only navigate on fresh login events.
+        queueMicrotask(() => {
+            acceptLoginNav.current = true
+        })
         const onSession = (e: Event) => {
             const next = (e as CustomEvent<VisitorAgentSession | null>).detail ?? null
             setSession(next)
+            if (acceptLoginNav.current && next) {
+                router.push("/map")
+            }
         }
         window.addEventListener(AGENT_SESSION_EVENT, onSession)
         return () => window.removeEventListener(AGENT_SESSION_EVENT, onSession)
-    }, [])
+    }, [router])
 
     useEffect(() => {
         if (!brief) return
@@ -68,31 +68,15 @@ export function LandingExplore() {
         return () => window.removeEventListener("keydown", onKey)
     }, [brief])
 
-    const go = (next: boolean) => {
-        if (next === openRef.current) return
-        const apply = () => flushSync(() => setOpen(next))
-        if (canViewTransition()) {
-            document.startViewTransition(apply)
+    const needsAgentLogin = mode === "agent" && !session
+
+    const enterMap = () => {
+        if (!mode) return
+        if (needsAgentLogin) {
+            dispatchOpenAgentLogin()
             return
         }
-        apply()
-    }
-
-    const goRef = useRef(go)
-    goRef.current = go
-
-    useEffect(() => {
-        const onExplore = () => goRef.current(true)
-        window.addEventListener(EXPLORE_MAP_EVENT, onExplore)
-        return () => window.removeEventListener(EXPLORE_MAP_EVENT, onExplore)
-    }, [])
-
-    if (open) {
-        return (
-            <section className="map-page landing-map">
-                <LiveMapExplorer onClose={() => go(false)} />
-            </section>
-        )
+        router.push("/map")
     }
 
     return (
@@ -142,10 +126,13 @@ export function LandingExplore() {
                             <button
                                 type="button"
                                 className={mode === "agent" ? "on" : ""}
-                            onClick={() => {
-                                markVisitorAsAgent()
-                                setMode("agent")
-                            }}
+                                onClick={() => {
+                                    markVisitorAsAgent()
+                                    setMode("agent")
+                                    const live = readVisitorAgentSession()
+                                    setSession(live)
+                                    if (!live) dispatchOpenAgentLogin()
+                                }}
                             >
                                 <AgentIcon />
                                 {session ? session.identifier : "Agent"}
@@ -155,12 +142,17 @@ export function LandingExplore() {
                             type="button"
                             className="hero-explore"
                             disabled={!mode}
-                            onClick={() => {
-                                if (!mode) return
-                                go(true)
-                            }}
+                            onClick={enterMap}
                         >
-                            Explore the Map <span>→</span>
+                            {needsAgentLogin ? (
+                                <>
+                                    Sign in to explore <span>→</span>
+                                </>
+                            ) : (
+                                <>
+                                    Explore the Map <span>→</span>
+                                </>
+                            )}
                         </button>
                     </div>
                 </div>

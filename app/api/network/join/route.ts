@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from "next/server"
 import { requireVisitor, agentCorsHeaders, agentOptionsResponse } from "@/lib/agent-access"
 import {
+    juryCookieHeader,
+    juryNetworkPrincipal,
+    matchJuryCode,
+    seedJury,
+} from "@/lib/jury"
+import {
+    addNetworkMember,
     isTrustNetworkId,
     joinNetworkWithKey,
     listTrustNetworks,
@@ -16,7 +23,7 @@ export function OPTIONS(req: NextRequest) {
 
 export async function GET(req: NextRequest) {
     const cors = agentCorsHeaders(req)
-    await seedTrustNetworkHosts().catch(() => {})
+    await Promise.all([seedTrustNetworkHosts().catch(() => {}), seedJury().catch(() => {})])
     const gate = requireVisitor(req)
     if (gate instanceof NextResponse) {
         return NextResponse.json(
@@ -56,6 +63,8 @@ export async function POST(req: NextRequest) {
         )
     }
 
+    await Promise.all([seedTrustNetworkHosts().catch(() => {}), seedJury().catch(() => {})])
+
     try {
         const member = await joinNetworkWithKey({
             network,
@@ -74,6 +83,38 @@ export async function POST(req: NextRequest) {
             { headers: cors }
         )
     } catch (error) {
+        // Jury ring: desk codes are also valid invites (per-juror).
+        if (network === "jury") {
+            const desk = await matchJuryCode(key)
+            if (desk.ok) {
+                await addNetworkMember({
+                    network: "jury",
+                    principal: juryNetworkPrincipal(desk.juror.slug),
+                    kind: "juror",
+                })
+                const member = await addNetworkMember({
+                    network: "jury",
+                    principal: gate.visitor.identifier,
+                    kind: "agent",
+                })
+                const memberships = await networksForPrincipal(gate.visitor.identifier)
+                const res = NextResponse.json(
+                    {
+                        success: true,
+                        member,
+                        memberships,
+                        juror: { slug: desk.juror.slug, name: desk.juror.name },
+                        hint: "Desk code accepted — on the jury trust ring. You can leave trails now.",
+                    },
+                    { headers: cors }
+                )
+                res.headers.append(
+                    "Set-Cookie",
+                    juryCookieHeader(desk.juror.slug, req.nextUrl.protocol === "https:")
+                )
+                return res
+            }
+        }
         const status = typeof error === "object" && error && "status" in error ? Number(error.status) : 500
         return NextResponse.json(
             { error: error instanceof Error ? error.message : "Join failed" },

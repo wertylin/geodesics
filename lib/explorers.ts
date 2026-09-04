@@ -1,4 +1,5 @@
 import { hasDatabase, sql } from "@/lib/db"
+import { seedJury } from "@/lib/jury"
 import { seedTrustNetworkHosts } from "@/lib/trust-network"
 
 export const FOLLOWER_COOKIE = "geodesics_follower"
@@ -45,9 +46,14 @@ function raceTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
 
 function seedOnce() {
     if (!cacheG.__geodesicsHostSeed) {
-        cacheG.__geodesicsHostSeed = seedTrustNetworkHosts().catch((err) => {
-            console.error("[explorers] seedTrustNetworkHosts failed", err)
-        })
+        cacheG.__geodesicsHostSeed = Promise.all([
+            seedTrustNetworkHosts().catch((err) => {
+                console.error("[explorers] seedTrustNetworkHosts failed", err)
+            }),
+            seedJury().catch((err) => {
+                console.error("[explorers] seedJury failed", err)
+            }),
+        ]).then(() => undefined)
     }
     return cacheG.__geodesicsHostSeed
 }

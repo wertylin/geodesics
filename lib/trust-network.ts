@@ -1,12 +1,20 @@
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "crypto"
 import { hasDatabase, sql } from "@/lib/db"
 import { authSecret } from "@/lib/secrets"
+import {
+    TRUST_RINGS,
+    isTrustNetworkId,
+    type TrustNetworkId,
+    type TrustRingDef,
+} from "@/lib/trust-rings"
 
-export type TrustNetworkId = "jury" | "moltbook"
+export type { TrustNetworkId }
+export { isTrustNetworkId }
 
 export type TrustNetwork = {
     id: TrustNetworkId
     label: string
+    blurb: string
     /** Invite key configured in env. Empty = network closed. */
     configured: boolean
 }
@@ -18,10 +26,7 @@ export type NetworkMember = {
     joined_at: string
 }
 
-const NETWORKS: Array<{ id: TrustNetworkId; label: string; envKey: string }> = [
-    { id: "jury", label: "Jury ring", envKey: "GEODESICS_NETWORK_JURY" },
-    { id: "moltbook", label: "Moltbook invite", envKey: "GEODESICS_NETWORK_MOLTBOOK" },
-]
+const NETWORKS: TrustRingDef[] = TRUST_RINGS
 
 function normalizeKey(raw: string): string {
     return raw.trim().replace(/\s+/g, "")
@@ -44,12 +49,9 @@ export function listTrustNetworks(): TrustNetwork[] {
     return NETWORKS.map((n) => ({
         id: n.id,
         label: n.label,
+        blurb: n.blurb,
         configured: Boolean(envInvite(n.id)),
     }))
-}
-
-export function isTrustNetworkId(raw: string): raw is TrustNetworkId {
-    return NETWORKS.some((n) => n.id === raw)
 }
 
 async function ensureMembersTable() {

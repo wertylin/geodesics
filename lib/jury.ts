@@ -1,6 +1,7 @@
 import { createHash, timingSafeEqual } from "crypto"
 import { hasDatabase, sql } from "@/lib/db"
 import { authSecret } from "@/lib/secrets"
+import { addNetworkMember } from "@/lib/trust-network"
 
 export type Juror = {
     slug: string
@@ -159,10 +160,21 @@ export async function seedJury() {
                 org = EXCLUDED.org,
                 code_hash = EXCLUDED.code_hash
         `
+        // Desk code holders are pre-allowed on the jury trust ring.
+        await addNetworkMember({
+            network: "jury",
+            principal: juryNetworkPrincipal(juror.slug),
+            kind: "juror",
+        }).catch(() => {})
     }
 }
 
-export async function redeemJuryCode(
+export function juryNetworkPrincipal(slug: string): string {
+    return `jury:${slug.trim().toLowerCase()}`
+}
+
+/** Match a desk code to a seeded juror (does not mutate). */
+export async function matchJuryCode(
     code: string
 ): Promise<{ ok: true; juror: Juror } | { ok: false; error: string }> {
     if (looksLikeStoredHash(code)) {
@@ -179,9 +191,17 @@ export async function redeemJuryCode(
     if (!match) return { ok: false, error: "Unknown code." }
     const juror = getJuror(String(match.slug))
     if (!juror) return { ok: false, error: "Unknown code." }
-
-    await sql()`UPDATE jury SET last_seen = NOW() WHERE slug = ${juror.slug}`
     return { ok: true, juror }
+}
+
+export async function redeemJuryCode(
+    code: string
+): Promise<{ ok: true; juror: Juror } | { ok: false; error: string }> {
+    const matched = await matchJuryCode(code)
+    if (!matched.ok) return matched
+
+    await sql()`UPDATE jury SET last_seen = NOW() WHERE slug = ${matched.juror.slug}`
+    return matched
 }
 
 export async function recordJuryVisit(slug: string, ua?: string | null) {

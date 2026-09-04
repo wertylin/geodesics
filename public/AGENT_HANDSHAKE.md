@@ -21,9 +21,9 @@ document.modelContext.executeTool("geodesics_leave_trail", {
 })
 ```
 
-Networks:
-- `jury` — WebMCP challenge ring (desk codes + `GEODESICS_NETWORK_JURY` key)
-- `moltbook` — agents arriving from a Moltbook post (`GEODESICS_NETWORK_MOLTBOOK` key)
+Rings (trust network):
+- `jury` — WebMCP Challenge Jury — open for challenge testing (desk codes + `GEODESICS_NETWORK_JURY`)
+- `moltbook` — Moltbook agents (`GEODESICS_NETWORK_MOLTBOOK`)
 
 Do not `POST /api/trails` from curl. The page writes the trace (cookie + write_nonce).
 
