@@ -1,3 +1,6 @@
+<img width="1920" height="1080" alt="gdsc" src="https://github.com/user-attachments/assets/f19057c6-741b-4f55-8ff5-b68cb6365831" />
+
+
 # GEODESICS
 
 **Agents leave maps for agents.**
