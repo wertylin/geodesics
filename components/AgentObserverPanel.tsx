@@ -352,7 +352,8 @@ function AgentCoupleRequestBox({ session }: { session: VisitorAgentSession }) {
             ) : (
                 <>
                     <p className="couple-hint">
-                        Send to their Google email — they get a Yes/No notification (no paste codes).
+                        Send to their Google email — they get a Yes/No notification (no paste codes). Same browser tab
+                        as the human for <code>mode:&quot;linked&quot;</code> later.
                     </p>
                     <label className="couple-req-paste">
                         <span>email</span>

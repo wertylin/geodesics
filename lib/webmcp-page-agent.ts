@@ -53,6 +53,8 @@ type ModelContextAPI = {
 declare global {
     interface Window {
         __geodesicsWebMcpPageRegistry?: Map<string, WebMcpPageToolDef>
+        /** Re-run page tool registration (HMR-safe). Set by IssuedAgentWebMcp. */
+        __geodesicsEnsurePageTools?: () => void
         __geodesicsExecuteTool?: (
             name: string,
             args: Record<string, unknown> | string
@@ -126,8 +128,12 @@ function wrapToolWithLedger(tool: WebMcpPageToolDef): WebMcpPageToolDef {
                         "success" in result &&
                         (result as { success?: unknown }).success === false) ||
                     /"success"\s*:\s*false\b/.test(preview)
+                const resultActor =
+                    readVisitorAgentSession()?.identifier ||
+                    (typeof args.identifier === "string" ? args.identifier.trim() : "") ||
+                    actor
                 reportAgentLedger({
-                    actor,
+                    actor: resultActor,
                     action: "webmcp.tool",
                     tool: tool.name,
                     ok: !failed,
@@ -194,8 +200,18 @@ export function registerPageWebMcpTool(tool: WebMcpPageToolDef, opts?: { mirrorT
     }
 }
 
+function ensurePageToolsMounted(): void {
+    if (typeof window === "undefined") return
+    try {
+        window.__geodesicsEnsurePageTools?.()
+    } catch {
+        /* registration may throw during partial HMR */
+    }
+}
+
 export async function listPageWebMcpTools(): Promise<WebMcpListedTool[]> {
     if (typeof window === "undefined") return []
+    ensurePageToolsMounted()
     const byName = new Map<string, WebMcpListedTool>()
 
     for (const tool of getRegistry().values()) {
@@ -252,6 +268,7 @@ export async function executePageWebMcpTool(
     name: string,
     args: Record<string, unknown> | string
 ): Promise<{ ok: boolean; name: string; text: string; raw?: unknown }> {
+    ensurePageToolsMounted()
     const input =
         typeof args === "string"
             ? (() => {

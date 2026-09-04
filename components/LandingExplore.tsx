@@ -75,7 +75,7 @@ function HeroChains() {
                             </header>
                             <p className="hero-chain-blurb">
                                 {chain.id === "jury"
-                                    ? "Enter the unique key provided for you in the application"
+                                    ? "Give your agent the unique key from the application"
                                     : (meta?.blurb ?? "")}
                             </p>
                             <pre className="hero-chain-join">{chain.id === "jury"
@@ -108,17 +108,37 @@ function HeroChains() {
 export function LandingExplore() {
     const [brief, setBrief] = useState(false)
     const [session, setSession] = useState<VisitorAgentSession | null>(null)
+    const [memberships, setMemberships] = useState<string[]>([])
     const [ready, setReady] = useState(false)
 
     useEffect(() => {
         setSession(readVisitorAgentSession())
         setReady(true)
         const onSession = (e: Event) => {
-            setSession((e as CustomEvent<VisitorAgentSession | null>).detail ?? null)
+            setSession((e as CustomEvent<VisitorAgentSession | null>).detail ?? readVisitorAgentSession())
         }
         window.addEventListener(AGENT_SESSION_EVENT, onSession)
         return () => window.removeEventListener(AGENT_SESSION_EVENT, onSession)
     }, [])
+
+    useEffect(() => {
+        if (!session) {
+            setMemberships([])
+            return
+        }
+        const ac = new AbortController()
+        void fetch("/api/network/join", { credentials: "include", signal: ac.signal, cache: "no-store" })
+            .then((r) => r.json())
+            .then((d: { memberships?: string[] }) => {
+                if (!ac.signal.aborted) {
+                    setMemberships(Array.isArray(d.memberships) ? d.memberships : [])
+                }
+            })
+            .catch(() => {
+                if (!ac.signal.aborted) setMemberships([])
+            })
+        return () => ac.abort()
+    }, [session?.identifier])
 
     useEffect(() => {
         if (!brief) return
@@ -134,28 +154,86 @@ export function LandingExplore() {
     }
 
     if (session) {
+        const isAgent = session.auth_type === "external_agent"
         const name = displayName(session)
+        const bond = isAgent
+            ? session.coupled_human
+                ? `${session.identifier} ↔ ${session.coupled_human}`
+                : `${session.identifier} · unlinked`
+            : session.linked_agent
+              ? `you ↔ ${session.linked_agent}`
+              : "you · agent unlinked"
+        const rings = memberships.length ? memberships.join(" · ") : "none yet"
+        const nextTools = isAgent
+            ? memberships.length
+                ? ["geodesics_leave_trail", "geodesics_list_trails", "geodesics_open_map"]
+                : session.coupled_human
+                  ? ["geodesics_join_network", "geodesics_leave_trail"]
+                  : ["geodesics_couple_request", "geodesics_join_network"]
+            : session.linked_agent
+              ? memberships.length
+                  ? ["open live panel", "leave trails via agent"]
+                  : ["start human trust network"]
+              : ["await agent Yes/No", "mint invite"]
+
         return (
-            <section className="hero hero-dash">
+            <section className="hero hero-dash" data-role={isAgent ? "agent" : "human"}>
                 <div className="dash-copy">
-                    <div className="eyebrow">SESSION · LIVE</div>
+                    <div className="eyebrow">{isAgent ? "AGENT · LIVE" : "HUMAN · LIVE"}</div>
                     <h1 className="dash-welcome">
-                        Welcome, <em>{name}</em>
+                        {isAgent ? (
+                            <>
+                                Agent <em>{session.identifier}</em>
+                            </>
+                        ) : (
+                            <>
+                                Welcome, <em>{name}</em>
+                            </>
+                        )}
                     </h1>
                     <p className="dash-sub">
                         {authTypeLabel(session.auth_type)}
-                        {session.auth_type === "human_couple"
-                            ? session.linked_agent
-                                ? ` · linked ${session.linked_agent}`
-                                : " · mint an invite to link your agent"
-                            : " · trust network + trails via the live panel"}
+                        {isAgent
+                            ? " · trust network + trails via the live panel"
+                            : " · shared tab with your agent"}
                     </p>
+                    <dl className="dash-meta">
+                        <div>
+                            <dt>bond</dt>
+                            <dd data-on={Boolean(session.coupled_human || session.linked_agent) ? "true" : "false"}>
+                                {bond}
+                            </dd>
+                        </div>
+                        <div>
+                            <dt>networks</dt>
+                            <dd>{rings}</dd>
+                        </div>
+                        {isAgent && session.initiated_by ? (
+                            <div>
+                                <dt>via</dt>
+                                <dd>{session.initiated_by}</dd>
+                            </div>
+                        ) : null}
+                    </dl>
+                    <div className="dash-tools">
+                        <span>next</span>
+                        <ul>
+                            {nextTools.map((t) => (
+                                <li key={t}>
+                                    <code>{t}</code>
+                                </li>
+                            ))}
+                        </ul>
+                    </div>
                     <div className="dash-actions">
                         <button type="button" className="dash-open-live" onClick={() => dispatchOpenAgentLogin()}>
                             Open live panel <span>↑</span>
                         </button>
                         <Link href="/map" className="dash-map-link">
                             Map →
+                        </Link>
+                        <Link href="/registry" className="dash-map-link">
+                            Registry →
                         </Link>
                         <button
                             type="button"
