@@ -3,7 +3,7 @@ import { assertPublicOrigin, formatTrailAge, isLoopbackOrigin, type Trail, type 
 import { hasDatabase, sql } from "@/lib/db"
 
 const TRAIL_CACHE_MS = 20_000
-const TRAIL_GEN = 2
+const TRAIL_GEN = 3
 const QUERY_MS = 6000
 
 const cacheG = globalThis as typeof globalThis & {
@@ -48,8 +48,8 @@ function rowToTrail(row: {
     return withAge({
         id: row.id,
         agent: row.agent,
-        origin: row.origin,
-        route: row.route,
+        origin: redactEmails(row.origin),
+        route: redactEmails(row.route),
         status: (row.status as TrailStatus) || "observed",
         goal: row.goal ? redactEmails(row.goal) : undefined,
         discovered_at: discovered,
@@ -156,7 +156,7 @@ export async function leaveTrail(input: {
             ${id},
             ${input.agent},
             ${origin},
-            ${route},
+            ${redactEmails(route)},
             ${"observed"},
             ${redactEmails(input.goal?.trim() || "Leave a path for the next agent")},
             ${discoveredAt}

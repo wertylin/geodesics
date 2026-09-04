@@ -24,6 +24,8 @@ async function main() {
         members.length,
         members.map((m) => `${m.network}:${m.principal}`).join(", ")
     )
+    const owned = await sql()`SELECT id, kind, left(owner_principal, 18) AS owner FROM networks ORDER BY id`
+    console.log("networks", owned)
 }
 
 main()

@@ -297,12 +297,15 @@ export function GeodesicGlobe({
     focusId = null,
     focusNonce = 0,
     onSelect,
+    alive = false,
 }: {
     trails: Trail[]
     compact?: boolean
     focusId?: string | null
     focusNonce?: number
     onSelect?: (id: string) => void
+    /** Coupled agent online — warmer palette + livelier spin. */
+    alive?: boolean
 }) {
     const router = useRouter()
     const wrapRef = useRef<HTMLDivElement>(null)
@@ -313,11 +316,13 @@ export function GeodesicGlobe({
     const hoverKey = useRef<string | null>(null)
     const focusRef = useRef(focusId)
     const onSelectRef = useRef(onSelect)
+    const aliveRef = useRef(alive)
     const aimRef = useRef<{ yaw: number; pitch: number } | null>(null)
     const [tip, setTip] = useState<{ label: string; x: number; y: number } | null>(null)
     const reduce = useRef(false)
     focusRef.current = focusId
     onSelectRef.current = onSelect
+    aliveRef.current = alive
 
     const shown = useMemo(() => {
         const rows = trails.slice(0, 18)
@@ -395,6 +400,7 @@ export function GeodesicGlobe({
             }
             const dt = Math.min(0.05, (now - last) / 1000)
             last = now
+            const live = aliveRef.current
             const aim = aimRef.current
             if (drag.current) {
                 aimRef.current = null
@@ -406,24 +412,29 @@ export function GeodesicGlobe({
                 while (dy < -Math.PI) dy += Math.PI * 2
                 if (Math.abs(dy) < 0.02 && Math.abs(aim.pitch - pitch.current) < 0.02) aimRef.current = null
             } else if (!reduce.current && !focusRef.current) {
-                yaw.current += dt * 0.18
+                yaw.current += dt * (live ? 0.42 : 0.18)
             } else if (!reduce.current) {
-                yaw.current += dt * 0.05
+                yaw.current += dt * (live ? 0.14 : 0.05)
             }
 
+            const bob = live && !reduce.current && !drag.current ? Math.sin(now / 900) * 0.045 : 0
             const w = wrap.clientWidth
             const h = wrap.clientHeight
             const cx = w * 0.5
-            const cy = h * 0.52
+            const cy = h * 0.52 + (live ? Math.sin(now / 1100) * 4 : 0)
             const r = Math.min(w, h) * (compact ? 0.42 : 0.38)
             const Y = yaw.current
-            const P = pitch.current
+            const P = pitch.current + bob
 
             ctx.clearRect(0, 0, w, h)
 
+            const accent = live ? [110, 232, 210] : [198, 243, 107]
+            const [ar, ag, ab] = accent
+            const rgba = (a: number) => `rgba(${ar},${ag},${ab},${a})`
+
             const halo = ctx.createRadialGradient(cx, cy, r * 0.7, cx, cy, r * 1.45)
-            halo.addColorStop(0, "rgba(198,243,107,0.07)")
-            halo.addColorStop(0.55, "rgba(198,243,107,0.03)")
+            halo.addColorStop(0, rgba(live ? 0.16 : 0.07))
+            halo.addColorStop(0.55, rgba(live ? 0.07 : 0.03))
             halo.addColorStop(1, "rgba(10,12,11,0)")
             ctx.fillStyle = halo
             ctx.beginPath()
@@ -433,9 +444,15 @@ export function GeodesicGlobe({
             const xf = (v: V3) => project(rot(v, Y, P), cx, cy, r)
 
             const disk = ctx.createRadialGradient(cx - r * 0.28, cy - r * 0.32, r * 0.1, cx, cy, r)
-            disk.addColorStop(0, "#18211c")
-            disk.addColorStop(0.55, "#101613")
-            disk.addColorStop(1, "#070908")
+            if (live) {
+                disk.addColorStop(0, "#1a2a28")
+                disk.addColorStop(0.55, "#101a19")
+                disk.addColorStop(1, "#070b0a")
+            } else {
+                disk.addColorStop(0, "#18211c")
+                disk.addColorStop(0.55, "#101613")
+                disk.addColorStop(1, "#070908")
+            }
             ctx.beginPath()
             ctx.arc(cx, cy, r * 0.99, 0, Math.PI * 2)
             ctx.fillStyle = disk
@@ -446,13 +463,13 @@ export function GeodesicGlobe({
             for (const line of grid) {
                 const pts = mapLine(line)
                 strokeChain(ctx, pts, false, (c) => {
-                    c.strokeStyle = "rgba(102,116,101,0.16)"
+                    c.strokeStyle = live ? "rgba(90,140,130,0.22)" : "rgba(102,116,101,0.16)"
                     c.lineWidth = 0.7
                 })
             }
             for (const ring of land) {
                 strokeChain(ctx, mapLine(ring), false, (c) => {
-                    c.strokeStyle = "rgba(157,176,150,0.18)"
+                    c.strokeStyle = live ? "rgba(140,200,190,0.22)" : "rgba(157,176,150,0.18)"
                     c.lineWidth = 1
                 })
             }
@@ -463,7 +480,7 @@ export function GeodesicGlobe({
                 const pts = []
                 for (let i = 0; i <= 28; i++) pts.push(xf(slerp(arc.a, arc.b, i / 28)))
                 strokeChain(ctx, pts, false, (c) => {
-                    c.strokeStyle = isHot(arc.trailId) ? "rgba(198,243,107,0.16)" : "rgba(198,243,107,0.04)"
+                    c.strokeStyle = isHot(arc.trailId) ? rgba(0.2) : rgba(0.05)
                     c.lineWidth = 1.1
                 })
             }
@@ -475,28 +492,28 @@ export function GeodesicGlobe({
 
             for (const line of grid) {
                 strokeChain(ctx, mapLine(line), true, (c) => {
-                    c.strokeStyle = "rgba(121,138,120,0.38)"
+                    c.strokeStyle = live ? "rgba(120,180,170,0.45)" : "rgba(121,138,120,0.38)"
                     c.lineWidth = 0.85
                 })
             }
             for (const ring of land) {
                 strokeChain(ctx, mapLine(ring), true, (c) => {
-                    c.strokeStyle = "rgba(201,214,190,0.55)"
+                    c.strokeStyle = live ? "rgba(180,230,220,0.62)" : "rgba(201,214,190,0.55)"
                     c.lineWidth = 1.15
                 })
             }
 
             ctx.setLineDash([5, 7])
-            ctx.lineDashOffset = -now / 90
+            ctx.lineDashOffset = -now / (live ? 55 : 90)
             for (const arc of arcs) {
                 if (!isHot(arc.trailId)) continue
                 const pts = []
                 for (let i = 0; i <= 32; i++) pts.push(xf(slerp(arc.a, arc.b, i / 32)))
                 strokeChain(ctx, pts, true, (c) => {
-                    c.strokeStyle = "rgba(198,243,107,0.9)"
-                    c.lineWidth = 1.85
-                    c.shadowColor = "rgba(198,243,107,0.5)"
-                    c.shadowBlur = 10
+                    c.strokeStyle = rgba(0.92)
+                    c.lineWidth = live ? 2.15 : 1.85
+                    c.shadowColor = rgba(0.55)
+                    c.shadowBlur = live ? 14 : 10
                 })
             }
             ctx.setLineDash([])
@@ -506,19 +523,20 @@ export function GeodesicGlobe({
                 const pts = []
                 for (let i = 0; i <= 24; i++) pts.push(xf(slerp(arc.a, arc.b, i / 24)))
                 strokeChain(ctx, pts, true, (c) => {
-                    c.strokeStyle = "rgba(198,243,107,0.18)"
+                    c.strokeStyle = rgba(0.2)
                     c.lineWidth = 1
                 })
             }
 
+            const nodeFill = live ? "#6ee8d2" : "#c6f36b"
             for (const arc of arcs) {
                 if (!isHot(arc.trailId)) continue
-                const t = (now / 2800 + (arc.seed % 1000) / 1000) % 1
+                const t = (now / (live ? 2000 : 2800) + (arc.seed % 1000) / 1000) % 1
                 const p = xf(slerp(arc.a, arc.b, t))
                 if (p.z < 0.02) continue
                 ctx.beginPath()
-                ctx.arc(p.x, p.y, 2.6, 0, Math.PI * 2)
-                ctx.fillStyle = "#c6f36b"
+                ctx.arc(p.x, p.y, live ? 3.1 : 2.6, 0, Math.PI * 2)
+                ctx.fillStyle = nodeFill
                 ctx.fill()
             }
 
@@ -531,9 +549,9 @@ export function GeodesicGlobe({
                 const hot = hoverKey.current === node.key
                 ctx.beginPath()
                 ctx.arc(p.x, p.y, hot ? 5.4 : onTrail ? 3.6 : 2.2, 0, Math.PI * 2)
-                ctx.fillStyle = hot || onTrail ? "#c6f36b" : "#0a0c0b"
+                ctx.fillStyle = hot || onTrail ? nodeFill : "#0a0c0b"
                 ctx.fill()
-                ctx.strokeStyle = onTrail ? "#c6f36b" : "rgba(198,243,107,0.35)"
+                ctx.strokeStyle = onTrail ? nodeFill : rgba(0.35)
                 ctx.lineWidth = onTrail ? 1.4 : 1
                 ctx.stroke()
             }
@@ -541,14 +559,14 @@ export function GeodesicGlobe({
 
             ctx.beginPath()
             ctx.arc(cx, cy, r, 0, Math.PI * 2)
-            ctx.strokeStyle = "rgba(198,243,107,0.28)"
-            ctx.lineWidth = 1.2
+            ctx.strokeStyle = rgba(live ? 0.45 : 0.28)
+            ctx.lineWidth = live ? 1.55 : 1.2
             ctx.stroke()
 
             const shade = ctx.createLinearGradient(cx - r, cy, cx + r, cy)
             shade.addColorStop(0, "rgba(0,0,0,0.35)")
             shade.addColorStop(0.45, "rgba(0,0,0,0)")
-            shade.addColorStop(1, "rgba(198,243,107,0.05)")
+            shade.addColorStop(1, rgba(0.08))
             ctx.beginPath()
             ctx.arc(cx, cy, r * 0.99, 0, Math.PI * 2)
             ctx.fillStyle = shade
@@ -629,7 +647,11 @@ export function GeodesicGlobe({
     }, [compact, router])
 
     return (
-        <div ref={wrapRef} className={compact ? "globe-figure compact" : "globe-figure"}>
+        <div
+            ref={wrapRef}
+            className={compact ? "globe-figure compact" : "globe-figure"}
+            data-alive={alive ? "true" : "false"}
+        >
             <canvas ref={canvasRef} aria-label="3D globe of geodesic trails" />
             {tip ? (
                 <span className="globe-tip" style={{ left: tip.x, top: tip.y }}>
@@ -637,7 +659,7 @@ export function GeodesicGlobe({
                 </span>
             ) : null}
             <div className="globe-hud">
-                <span>great circles</span>
+                <span>{alive ? "bond live" : "great circles"}</span>
                 <strong>{String(liveCount || graph.nodes.length).padStart(3, "0")}</strong>
             </div>
         </div>
