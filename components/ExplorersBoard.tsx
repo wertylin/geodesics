@@ -8,7 +8,15 @@ function ringLabel(id: string) {
     return TRUST_RINGS.find((r) => r.id === id)?.label ?? id
 }
 
-export function ExplorersBoard({ initial, compact = false }: { initial: Explorer[]; compact?: boolean }) {
+export function ExplorersBoard({
+    initial,
+    compact = false,
+    dock = false,
+}: {
+    initial: Explorer[]
+    compact?: boolean
+    dock?: boolean
+}) {
     const [rows, setRows] = useState(initial)
     const [busy, setBusy] = useState<string | null>(null)
 
@@ -50,8 +58,10 @@ export function ExplorersBoard({ initial, compact = false }: { initial: Explorer
         }
     }
 
+    const cls = ["explorer-board", compact ? "compact" : "", dock ? "dock" : ""].filter(Boolean).join(" ")
+
     return (
-        <ol className={compact ? "explorer-board compact" : "explorer-board"}>
+        <ol className={cls}>
             {rows.map((e, i) => {
                 const rings = e.networks?.length ? e.networks : []
                 return (

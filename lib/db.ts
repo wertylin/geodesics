@@ -1,6 +1,6 @@
 import postgres from "postgres"
 
-const CLIENT_GEN = 7
+const CLIENT_GEN = 10
 
 const g = globalThis as typeof globalThis & {
     __geodesicsSql?: ReturnType<typeof postgres>
@@ -125,6 +125,43 @@ export async function ensureSchema() {
                     PRIMARY KEY (network, principal)
                 )
             `
+            await db`
+                CREATE TABLE IF NOT EXISTS humans (
+                    google_sub TEXT PRIMARY KEY,
+                    email TEXT NOT NULL,
+                    display_name TEXT,
+                    picture TEXT,
+                    linked_agent TEXT,
+                    couple_key_hash TEXT,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    last_login TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                )
+            `
+            await db`ALTER TABLE humans ADD COLUMN IF NOT EXISTS couple_key_hash TEXT`
+            await db`CREATE INDEX IF NOT EXISTS humans_email_idx ON humans (email)`
+            await db`CREATE INDEX IF NOT EXISTS humans_linked_agent_idx ON humans (linked_agent)`
+            await db`
+                CREATE TABLE IF NOT EXISTS couple_invites (
+                    invite_hash TEXT PRIMARY KEY,
+                    google_sub TEXT NOT NULL REFERENCES humans(google_sub) ON DELETE CASCADE,
+                    exp TIMESTAMPTZ NOT NULL,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                )
+            `
+            await db`CREATE INDEX IF NOT EXISTS couple_invites_google_idx ON couple_invites (google_sub)`
+            await db`CREATE INDEX IF NOT EXISTS couple_invites_exp_idx ON couple_invites (exp)`
+            await db`
+                CREATE TABLE IF NOT EXISTS couple_requests (
+                    request_hash TEXT PRIMARY KEY,
+                    agent TEXT NOT NULL,
+                    human_email TEXT,
+                    exp TIMESTAMPTZ NOT NULL,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                )
+            `
+            await db`CREATE INDEX IF NOT EXISTS couple_requests_agent_idx ON couple_requests (agent)`
+            await db`CREATE INDEX IF NOT EXISTS couple_requests_email_idx ON couple_requests (human_email)`
+            await db`CREATE INDEX IF NOT EXISTS couple_requests_exp_idx ON couple_requests (exp)`
         })().catch((err) => {
             g.__geodesicsSchema = undefined
             throw err

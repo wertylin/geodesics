@@ -17,7 +17,7 @@ import {
 import { executePageWebMcpTool, listPageWebMcpTools, registerPageWebMcpTool, toWebMcpToolText } from "@/lib/webmcp-page-agent"
 
 const LOGIN_DESC =
-    "Authenticate an issued GEODESICS visitor agent. Call from any view — tool lives on the page registry. After success, visitor session is set and trail tools unlock."
+    "Authenticate as a visitor agent. Couple path: { identifier, invite } or { mode:\"linked\" } (no secret). Classic: { identifier, secret } from .env."
 
 export function IssuedAgentWebMcp() {
     const router = useRouter()
@@ -37,32 +37,52 @@ export function IssuedAgentWebMcp() {
     useEffect(() => {
         registerPageWebMcpTool({
             name: "geodesics_agent_login",
-            description: LOGIN_DESC,
+            description:
+                "Authenticate as a visitor agent. Two paths: (1) couple bond — { identifier, invite } or { mode:\"linked\" } when human already linked this agent (no secret); (2) classic — { identifier, secret } from .env / issued secret.",
             inputSchema: {
                 type: "object",
                 properties: {
                     identifier: {
                         type: "string",
-                        description: "Issued agent identifier or agent email.",
+                        description: "Agent id (e.g. openclaw). Required for secret/invite; optional for mode=linked.",
                     },
-                    secret: { type: "string", description: "Issued secret. Required." },
+                    secret: {
+                        type: "string",
+                        description: "Issued secret from .env. Classic path — omit when using invite or mode=linked.",
+                    },
+                    invite: {
+                        type: "string",
+                        description: "inv_… from human Observer. Bonds + logs in without secret.",
+                    },
+                    mode: {
+                        type: "string",
+                        enum: ["linked", "couple"],
+                        description: "Elevate from human couple cookie when linked_agent is already set.",
+                    },
                 },
-                required: ["identifier", "secret"],
             },
             execute: async (input) => {
                 const identifier = String(input.identifier ?? "").trim()
                 const secret = String(input.secret ?? "").trim()
+                const invite = String(input.invite ?? "").trim()
+                const mode = String(input.mode ?? "").trim()
+                const body: Record<string, string> = {}
+                if (identifier) body.identifier = identifier
+                if (secret) body.secret = secret
+                if (invite) body.invite = invite
+                if (mode) body.mode = mode
                 const res = await fetch("/api/agent/login", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     credentials: "include",
-                    body: JSON.stringify({ identifier, secret }),
+                    body: JSON.stringify(body),
                 })
                 const data = (await res.json().catch(() => ({}))) as Record<string, unknown>
                 if (!res.ok) {
                     return toWebMcpToolText({
                         success: false,
                         error: typeof data.error === "string" ? data.error : "Agent login failed",
+                        try: data.try,
                     })
                 }
                 const session = visitorSessionFromLoginPayload(data)
@@ -72,7 +92,9 @@ export function IssuedAgentWebMcp() {
                 completeAgentLogin(session)
                 return toWebMcpToolText({
                     success: true,
+                    path: data.path,
                     visitor_agent: session.identifier,
+                    coupled_human: session.coupled_human ?? null,
                     next: [
                         "geodesics_join_network",
                         "geodesics_list_trails",
@@ -80,7 +102,7 @@ export function IssuedAgentWebMcp() {
                         "geodesics_open_map",
                         "geodesics_list_agent_surface",
                     ],
-                    hint: "Session is set. Join a trust network, then leave trails.",
+                    hint: typeof data.hint === "string" ? data.hint : "Session is set.",
                     agent: session,
                 })
             },
@@ -98,7 +120,126 @@ export function IssuedAgentWebMcp() {
         })
 
         registerPageWebMcpTool({
-            name: "geodesics_get_connection_mode",
+            name: "geodesics_couple_claim",
+            description:
+                "Claim a human couple invite (inv_…). Prefer geodesics_agent_login({ identifier, invite }) which bonds + logs in. This tool also accepts identifier+invite without a prior secret login.",
+            inputSchema: {
+                type: "object",
+                properties: {
+                    invite: {
+                        type: "string",
+                        description: "inv_… short-lived invite from the human.",
+                    },
+                    identifier: {
+                        type: "string",
+                        description: "Agent id when not already logged in (secret not required).",
+                    },
+                },
+                required: ["invite"],
+            },
+            execute: async (input) => {
+                const invite = String(input.invite ?? "").trim()
+                const identifier = String(input.identifier ?? "").trim()
+                if (!invite) {
+                    return toWebMcpToolText({ success: false, error: "invite is required" })
+                }
+                const visitor = readVisitorAgentSession()
+                if (visitor?.auth_type === "external_agent") {
+                    const res = await fetch("/api/auth/couple", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        credentials: "include",
+                        body: JSON.stringify({ action: "claim", invite }),
+                    })
+                    const data = (await res.json().catch(() => ({}))) as Record<string, unknown>
+                    if (!res.ok) {
+                        return toWebMcpToolText({
+                            success: false,
+                            error: typeof data.error === "string" ? data.error : "claim failed",
+                        })
+                    }
+                    return toWebMcpToolText(data)
+                }
+                if (!identifier) {
+                    return toWebMcpToolText({
+                        success: false,
+                        error: "Pass identifier with invite (no secret), or login first.",
+                        try: 'geodesics_agent_login({ identifier: "openclaw", invite })',
+                    })
+                }
+                const res = await fetch("/api/agent/login", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    credentials: "include",
+                    body: JSON.stringify({ identifier, invite }),
+                })
+                const data = (await res.json().catch(() => ({}))) as Record<string, unknown>
+                if (!res.ok) {
+                    return toWebMcpToolText({
+                        success: false,
+                        error: typeof data.error === "string" ? data.error : "claim/login failed",
+                    })
+                }
+                const session = visitorSessionFromLoginPayload(data)
+                if (session) completeAgentLogin(session)
+                return toWebMcpToolText({
+                    success: true,
+                    claimed: true,
+                    path: data.path,
+                    agent: session,
+                    hint: typeof data.hint === "string" ? data.hint : "Bonded + logged in.",
+                })
+            },
+        })
+
+        registerPageWebMcpTool({
+            name: "geodesics_couple_request",
+            description:
+                "Logged-in agent requests a couple bond with a human (sonradan bağ). Optional email queues it in their Observer; always returns req_… they can paste later.",
+            inputSchema: {
+                type: "object",
+                properties: {
+                    email: {
+                        type: "string",
+                        description: "Optional human Google email to notify in Observer.",
+                    },
+                },
+            },
+            execute: async (input) => {
+                const visitor = readVisitorAgentSession()
+                if (!visitor || visitor.auth_type !== "external_agent") {
+                    return toWebMcpToolText({
+                        success: false,
+                        error: "Log in as agent first (secret or invite).",
+                        try: 'geodesics_agent_login({ identifier, secret })',
+                    })
+                }
+                const email = String(input.email ?? "").trim()
+                const res = await fetch("/api/auth/couple", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    credentials: "include",
+                    body: JSON.stringify({
+                        action: "request",
+                        email: email || undefined,
+                    }),
+                })
+                const data = (await res.json().catch(() => ({}))) as Record<string, unknown>
+                if (!res.ok) {
+                    return toWebMcpToolText({
+                        success: false,
+                        error: typeof data.error === "string" ? data.error : "request failed",
+                    })
+                }
+                return toWebMcpToolText({
+                    success: true,
+                    request: data.request,
+                    expires_in_sec: data.expires_in_sec,
+                    human_email: data.human_email ?? null,
+                    hint: typeof data.hint === "string" ? data.hint : "Human accepts in Observer.",
+                })
+            },
+        })
             description: "Visitor vs unknown connection plus issued visitor session.",
             inputSchema: { type: "object", properties: {} },
             annotations: { readOnlyHint: "true" },

@@ -186,27 +186,33 @@ function JuryRedeem() {
     )
 }
 
-export function LiveRail() {
+/** Glass dock panel — trust network explorers + desk redeem. */
+export function TrustNetworkPanel() {
     const { trails, explorers, explorersReady } = useLive()
     return (
-        <aside id="explorers" className="hero-aside explorers-rail">
-            <div className="explorers-rail-head">
+        <aside id="explorers" className="trust-panel" aria-label="Trust network">
+            <div className="trust-panel-head">
+                <span className="activity-pulse" aria-hidden />
                 <span>TRUST NETWORK</span>
                 <small>{String(trails.length).padStart(3, "0")} trails</small>
             </div>
-            <span className="pulse-label">
-                <i /> WebMCP entry live
-            </span>
-            {!explorersReady && !explorers.length ? (
-                <p className="muted">ranking live traces…</p>
-            ) : explorers.length ? (
-                <ExplorersBoard initial={explorers} compact />
-            ) : (
-                <p className="muted">invite-only · join a trust network to appear</p>
-            )}
+            <div className="trust-panel-body">
+                {!explorersReady && !explorers.length ? (
+                    <p className="muted">ranking live traces…</p>
+                ) : explorers.length ? (
+                    <ExplorersBoard initial={explorers} compact dock />
+                ) : (
+                    <p className="muted">invite-only · join to appear</p>
+                )}
+            </div>
             <JuryRedeem />
         </aside>
     )
+}
+
+/** @deprecated use TrustNetworkPanel in AgentLiveChrome */
+export function LiveRail() {
+    return <TrustNetworkPanel />
 }
 
 export function LiveGlobe({ compact = false }: { compact?: boolean }) {

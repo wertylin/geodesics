@@ -1,10 +1,13 @@
 import { createHmac, timingSafeEqual } from "crypto"
 import { NextRequest, NextResponse } from "next/server"
 import type { VisitorAgentSession } from "@/lib/agent-session"
+import { normalizeAuthType } from "@/lib/auth-types"
 import { authSecret } from "@/lib/secrets"
 
 export const VISITOR_COOKIE = "geodesics_visitor"
-const COOKIE_MAX_AGE = 60 * 60 * 24 * 7
+/** Bump to invalidate all outstanding visitor cookies (PII session leak remediation). */
+const COOKIE_VER = 2
+const COOKIE_MAX_AGE = 60 * 60 * 12
 
 export type AgentSurface = { kind: "visitor"; visitor: VisitorAgentSession }
 
@@ -19,8 +22,8 @@ function b64url(buf: Buffer): string {
 function signVisitor(session: VisitorAgentSession, exp: number): string {
     const secret = cookieSecret()
     if (!secret) throw new Error("GEODESICS_AUTH_SECRET is not set")
-    const payload = b64url(Buffer.from(JSON.stringify({ ...session, exp }), "utf8"))
-    const mac = createHmac("sha256", secret).update(payload).digest()
+    const payload = b64url(Buffer.from(JSON.stringify({ ...session, exp, v: COOKIE_VER }), "utf8"))
+    const mac = createHmac("sha256", secret).update(`v${COOKIE_VER}:${payload}`).digest()
     return `${payload}.${b64url(mac)}`
 }
 
@@ -29,13 +32,15 @@ export function parseVisitorToken(raw: string | undefined | null): VisitorAgentS
     if (!secret || !raw || !raw.includes(".")) return null
     const [payload, mac] = raw.split(".")
     if (!payload || !mac) return null
-    const expected = createHmac("sha256", secret).update(payload).digest()
+    const expected = createHmac("sha256", secret).update(`v${COOKIE_VER}:${payload}`).digest()
     const given = Buffer.from(mac, "base64url")
     if (given.length !== expected.length || !timingSafeEqual(given, expected)) return null
     try {
         const data = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as VisitorAgentSession & {
             exp?: number
+            v?: number
         }
+        if (data.v !== COOKIE_VER) return null
         if (typeof data.exp === "number" && data.exp * 1000 < Date.now()) return null
         if (typeof data.identifier !== "string" || !data.identifier) return null
         return {
@@ -43,6 +48,10 @@ export function parseVisitorToken(raw: string | undefined | null): VisitorAgentS
             display_name: data.display_name ?? null,
             email: data.email ?? null,
             initiated_by: data.initiated_by ?? "geodesics",
+            auth_type: normalizeAuthType(data.auth_type),
+            google_sub: data.google_sub ?? null,
+            linked_agent: data.linked_agent ?? null,
+            coupled_human: data.coupled_human ?? null,
         }
     } catch {
         return null
@@ -69,10 +78,13 @@ export function readVisitorFromRequest(req: NextRequest): VisitorAgentSession | 
 export function requireVisitor(req: NextRequest): AgentSurface | NextResponse {
     const visitor = readVisitorFromRequest(req)
     if (visitor) return { kind: "visitor", visitor }
-    return NextResponse.json({ error: "Unauthorized. Call geodesics_agent_login first." }, {
-        status: 401,
-        headers: agentCorsHeaders(req),
-    })
+    return NextResponse.json(
+        { error: "Unauthorized. Sign in as human–agent couple (Google) or call geodesics_agent_login." },
+        {
+            status: 401,
+            headers: agentCorsHeaders(req),
+        }
+    )
 }
 
 const ORIGIN_OK = /^http:\/\/(localhost|127\.0\.0\.1):\d+$/i

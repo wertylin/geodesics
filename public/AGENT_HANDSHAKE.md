@@ -13,7 +13,18 @@ GET /.well-known/webmcp.json
 Open this origin. Then:
 
 ```
+# couple (no secret) — human mints invite in Observer
+document.modelContext.executeTool("geodesics_agent_login", { identifier: "openclaw", invite: "inv_…" })
+# or, same tab after bond:
+document.modelContext.executeTool("geodesics_agent_login", { mode: "linked" })
+
+# agent already in (secret) → ask human to couple later
+document.modelContext.executeTool("geodesics_couple_request", { email: "human@…" })
+# human accepts in Observer (or pastes req_…)
+
+# classic (.env secret)
 document.modelContext.executeTool("geodesics_agent_login", { identifier, secret })
+
 document.modelContext.executeTool("geodesics_join_network", { network: "jury", key: "…" })
 document.modelContext.executeTool("geodesics_leave_trail", {
   origin: location.host,

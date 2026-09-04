@@ -4,7 +4,6 @@ import { useEffect, useRef, useState, useSyncExternalStore } from "react"
 import {
     AGENT_ACTIVITY_BROADCAST,
     AGENT_ACTIVITY_EVENT,
-    formatActivityLine,
     formatActivityTime,
     type ActivityEvent,
 } from "@/lib/agent-activity"
@@ -39,8 +38,10 @@ function snapshot() {
     return mem
 }
 
+const EMPTY: ActivityEvent[] = []
+
 function useActivityFeed() {
-    return useSyncExternalStore(subscribe, snapshot, () => [] as ActivityEvent[])
+    return useSyncExternalStore(subscribe, snapshot, () => EMPTY)
 }
 
 export function AgentActivityTicker() {
@@ -122,14 +123,7 @@ export function AgentActivityTicker() {
                     ))
                 ) : (
                     <li className="activity-empty muted">
-                        waiting for executeTool — {formatActivityLine({
-                            id: "_",
-                            ts: new Date().toISOString(),
-                            actor: "agent",
-                            action: "webmcp.tool",
-                            tool: "geodesics_agent_login",
-                            status: "ok",
-                        })}
+                        waiting for executeTool — agent · geodesics_agent_login → ok · --:--:--
                     </li>
                 )}
             </ul>

@@ -1,12 +1,6 @@
 'use client'
 import Link from 'next/link'
-import { useEffect, useState } from 'react'
-import { AgentLogin } from '@/components/AgentLogin'
-import {
-    AGENT_NAVIGATE_EVENT,
-    AGENT_OPEN_LOGIN_EVENT,
-    type AgentNavigateDetail,
-} from '@/lib/agent-session'
+import { useState } from 'react'
 import { type Trail } from '@/lib/trails'
 export function Wordmark(){
     return (
@@ -16,18 +10,22 @@ export function Wordmark(){
     )
 }
 export function Header(){
-    const [open,setOpen]=useState(false)
-    useEffect(()=>{
-        const onOpen=()=>setOpen(true)
-        const onNav=(e:Event)=>{if((e as CustomEvent<AgentNavigateDetail>).detail?.closeAgentLogin) setOpen(false)}
-        window.addEventListener(AGENT_OPEN_LOGIN_EVENT,onOpen)
-        window.addEventListener(AGENT_NAVIGATE_EVENT,onNav)
-        return()=>{
-            window.removeEventListener(AGENT_OPEN_LOGIN_EVENT,onOpen)
-            window.removeEventListener(AGENT_NAVIGATE_EVENT,onNav)
-        }
-    },[])
-    return <><header className="site-header"><Wordmark/><a className="challenge-flag" href="https://webmcp.devpost.com/" target="_blank" rel="noreferrer"><i /><span className="flag-full">Running for WebMCP Challenge</span><span className="flag-compact">WebMCP</span></a></header>{open&&<AgentLogin onBack={()=>setOpen(false)}/>}</>
+    return (
+        <header className="site-header">
+            <Wordmark />
+            <nav className="site-nav" aria-label="Site">
+                <a href="https://github.com/wertylin/geodesics" target="_blank" rel="noreferrer">GitHub ↗</a>
+                <Link href="/registry">Registry</Link>
+                <a href="/.well-known/webmcp.json">WebMCP</a>
+                <Link href="/AGENT_HANDSHAKE.md">Handshake</Link>
+            </nav>
+            <a className="challenge-flag" href="https://webmcp.devpost.com/" target="_blank" rel="noreferrer">
+                <i />
+                <span className="flag-full">Running for WebMCP Challenge</span>
+                <span className="flag-compact">WebMCP</span>
+            </a>
+        </header>
+    )
 }
 function hostOf(origin: string) {
     return origin.replace(/^https?:\/\//, "").split("/")[0] || origin
@@ -80,4 +78,4 @@ export function MapCanvas({ compact = false, trails = [] }: { compact?: boolean;
 }
 export function Status({type}:{type:string}){return <span className={`status ${type}`}><b>{type==='changed'?'⚠':'✓'}</b> {type}</span>}
 export function TrailCard({trail}:{trail:Trail}){return <Link href={`/trail/${trail.id}`} className="trail-card"><div className="trail-top"><span>TRAIL #{trail.id}</span><Status type={trail.status}/></div><div className="trail-agent">{trail.agent}</div><div className="trail-origin">{trail.origin}</div><div className="trail-route">{trail.route}</div><div className="trail-age">{trail.age}</div></Link>}
-export function Footer(){return <footer><div><a href="https://github.com/wertylin/geodesics" target="_blank" rel="noreferrer">GitHub ↗</a><Link href="/registry">Registry</Link><a href="/.well-known/webmcp.json">WebMCP</a><Link href="/AGENT_HANDSHAKE.md">Handshake</Link></div></footer>}
+export function Footer(){return null}

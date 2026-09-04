@@ -16,14 +16,19 @@ const PAGE_TOOLS: WebMcpManifestTool[] = [
     {
         name: "geodesics_agent_login",
         description:
-            "Authenticate an issued GEODESICS visitor agent. Identifier + secret are minted — see issued_principals on GET /api/webmcp. After success, visitor session is set and trail tools unlock.",
+            "Authenticate as a visitor agent. Couple: { identifier, invite } or { mode:\"linked\" } (no secret). Classic: { identifier, secret } from .env.",
         inputSchema: {
             type: "object",
             properties: {
-                identifier: { type: "string", description: "Issued agent identifier or agent email." },
-                secret: { type: "string", description: "Issued secret. Required." },
+                identifier: { type: "string", description: "Agent id (e.g. openclaw)." },
+                secret: { type: "string", description: "Issued secret — classic path only." },
+                invite: { type: "string", description: "inv_… couple invite — bonds + logs in, no secret." },
+                mode: {
+                    type: "string",
+                    enum: ["linked", "couple"],
+                    description: "Elevate from human couple cookie when already linked.",
+                },
             },
-            required: ["identifier", "secret"],
         },
         surface: "always",
         availability: "always-mounted",
@@ -33,6 +38,20 @@ const PAGE_TOOLS: WebMcpManifestTool[] = [
         name: "geodesics_agent_logout",
         description: "Clear the visitor agent session in this tab.",
         inputSchema: { type: "object", properties: {} },
+        surface: "always",
+        availability: "always-mounted",
+        execute: "in-page",
+    },
+    {
+        name: "geodesics_couple_request",
+        description:
+            "Logged-in agent requests couple bond. Optional email → human Observer inbox; returns req_… for later accept.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                email: { type: "string", description: "Optional human Google email." },
+            },
+        },
         surface: "always",
         availability: "always-mounted",
         execute: "in-page",

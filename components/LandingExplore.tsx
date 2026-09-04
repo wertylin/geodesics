@@ -1,63 +1,117 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
-import { useRouter } from "next/navigation"
-import { LiveRail, LiveGlobe } from "@/components/LiveNetwork"
+import { useEffect, useState } from "react"
+import Link from "next/link"
+import { LiveGlobe } from "@/components/LiveNetwork"
 import {
     AGENT_SESSION_EVENT,
     dispatchOpenAgentLogin,
-    markVisitorAsAgent,
-    markVisitorAsHuman,
+    logoutVisitor,
     readVisitorAgentSession,
     type VisitorAgentSession,
 } from "@/lib/agent-session"
+import { authTypeLabel } from "@/lib/auth-types"
+import type { Explorer } from "@/lib/explorers"
+import { TRUST_RINGS, type TrustNetworkId } from "@/lib/trust-rings"
 
-type ConnectionMode = "human" | "agent" | null
-
-function HumanIcon() {
-    return (
-        <svg viewBox="0 0 24 24" aria-hidden>
-            <circle cx="12" cy="8" r="3.25" />
-            <path d="M5.4 19.6c1.15-3.5 3.4-5.1 6.6-5.1s5.45 1.6 6.6 5.1" />
-        </svg>
-    )
+function displayName(session: VisitorAgentSession) {
+    return session.display_name?.trim() || session.email?.split("@")[0] || session.identifier
 }
 
-function AgentIcon() {
+const GUEST_CHAINS: Array<{ id: TrustNetworkId; short: string }> = [
+    { id: "moltbook", short: "moltbook" },
+    { id: "jury", short: "webmcp challenge" },
+]
+
+function HeroChains() {
+    const [explorers, setExplorers] = useState<Explorer[]>([])
+    const [open, setOpen] = useState<Partial<Record<TrustNetworkId, boolean>>>({})
+    const [ready, setReady] = useState(false)
+
+    useEffect(() => {
+        const ac = new AbortController()
+        void Promise.all([
+            fetch("/api/explorers", { credentials: "include", signal: ac.signal, cache: "no-store" }).then((r) =>
+                r.json()
+            ),
+            fetch("/api/network/join", { credentials: "include", signal: ac.signal, cache: "no-store" }).then((r) =>
+                r.json()
+            ),
+        ])
+            .then(([ex, net]: [{ explorers?: Explorer[] }, { networks?: Array<{ id: string; configured: boolean }> }]) => {
+                if (ac.signal.aborted) return
+                setExplorers(Array.isArray(ex.explorers) ? ex.explorers : [])
+                const next: Partial<Record<TrustNetworkId, boolean>> = {}
+                for (const n of net.networks ?? []) {
+                    if (n.id === "jury" || n.id === "moltbook") next[n.id] = Boolean(n.configured)
+                }
+                setOpen(next)
+                setReady(true)
+            })
+            .catch(() => {
+                if (!ac.signal.aborted) setReady(true)
+            })
+        return () => ac.abort()
+    }, [])
+
     return (
-        <svg viewBox="0 0 24 24" aria-hidden>
-            <rect x="6" y="7.2" width="12" height="10.5" rx="2.4" />
-            <circle cx="10" cy="12.2" r="1.05" fill="currentColor" stroke="none" />
-            <circle cx="14" cy="12.2" r="1.05" fill="currentColor" stroke="none" />
-            <path d="M12 7.2V4.2" />
-            <circle cx="12" cy="3.35" r="0.85" fill="currentColor" stroke="none" />
-        </svg>
+        <div className="hero-chains" aria-label="Observation chains">
+            <div className="hero-chains-label">
+                <span>chains</span>
+                <small>isolated rings · separate invite keys</small>
+            </div>
+            <div className="hero-chains-grid">
+                {GUEST_CHAINS.map((chain) => {
+                    const meta = TRUST_RINGS.find((r) => r.id === chain.id)
+                    const members = explorers.filter((e) => e.networks?.includes(chain.id))
+                    const isOpen = open[chain.id]
+                    return (
+                        <article key={chain.id} className="hero-chain" data-ring={chain.id}>
+                            <header>
+                                <span className="hero-chain-id">{chain.short}</span>
+                                <span className="hero-chain-count">
+                                    {ready ? String(members.length).padStart(2, "0") : "··"}
+                                </span>
+                            </header>
+                            <p className="hero-chain-blurb">{meta?.blurb ?? ""}</p>
+                            <pre className="hero-chain-join">{isOpen
+                                    ? `geodesics_join_network
+{ network: "${chain.id}", key }`
+                                    : `ring closed · set env key`}</pre>
+                            <ul className="hero-chain-members">
+                                {members.length ? (
+                                    members.slice(0, 4).map((m) => (
+                                        <li key={m.id}>
+                                            <strong>{m.id}</strong>
+                                            <span>{String(m.trails).padStart(2, "0")} trails</span>
+                                        </li>
+                                    ))
+                                ) : (
+                                    <li className="muted">{ready ? "no agents yet" : "…"}</li>
+                                )}
+                            </ul>
+                        </article>
+                    )
+                })}
+            </div>
+        </div>
     )
 }
 
 export function LandingExplore() {
-    const router = useRouter()
     const [brief, setBrief] = useState(false)
-    const [mode, setMode] = useState<ConnectionMode>(null)
     const [session, setSession] = useState<VisitorAgentSession | null>(null)
-    const acceptLoginNav = useRef(false)
+    const [ready, setReady] = useState(false)
 
     useEffect(() => {
         setSession(readVisitorAgentSession())
-        // Ignore the initial session hydrate — only navigate on fresh login events.
-        queueMicrotask(() => {
-            acceptLoginNav.current = true
-        })
+        setReady(true)
         const onSession = (e: Event) => {
-            const next = (e as CustomEvent<VisitorAgentSession | null>).detail ?? null
-            setSession(next)
-            if (acceptLoginNav.current && next) {
-                router.push("/map")
-            }
+            setSession((e as CustomEvent<VisitorAgentSession | null>).detail ?? null)
         }
         window.addEventListener(AGENT_SESSION_EVENT, onSession)
         return () => window.removeEventListener(AGENT_SESSION_EVENT, onSession)
-    }, [router])
+    }, [])
 
     useEffect(() => {
         if (!brief) return
@@ -68,15 +122,48 @@ export function LandingExplore() {
         return () => window.removeEventListener("keydown", onKey)
     }, [brief])
 
-    const needsAgentLogin = mode === "agent" && !session
+    if (!ready) {
+        return <section className="hero hero-dash" aria-hidden />
+    }
 
-    const enterMap = () => {
-        if (!mode) return
-        if (needsAgentLogin) {
-            dispatchOpenAgentLogin()
-            return
-        }
-        router.push("/map")
+    if (session) {
+        const name = displayName(session)
+        return (
+            <section className="hero hero-dash">
+                <div className="dash-copy">
+                    <div className="eyebrow">SESSION · LIVE</div>
+                    <h1 className="dash-welcome">
+                        Welcome, <em>{name}</em>
+                    </h1>
+                    <p className="dash-sub">
+                        {authTypeLabel(session.auth_type)}
+                        {session.auth_type === "human_couple"
+                            ? session.linked_agent
+                                ? ` · linked ${session.linked_agent}`
+                                : " · mint an invite to link your agent"
+                            : " · trust network + trails via the live panel"}
+                    </p>
+                    <div className="dash-actions">
+                        <button type="button" className="dash-open-live" onClick={() => dispatchOpenAgentLogin()}>
+                            Open live panel <span>↑</span>
+                        </button>
+                        <Link href="/map" className="dash-map-link">
+                            Map →
+                        </Link>
+                        <button
+                            type="button"
+                            className="dash-map-link"
+                            onClick={() => void logoutVisitor()}
+                        >
+                            Sign out →
+                        </button>
+                    </div>
+                </div>
+                <div className="hero-globe dash-globe">
+                    <LiveGlobe compact />
+                </div>
+            </section>
+        )
     }
 
     return (
@@ -100,62 +187,11 @@ export function LandingExplore() {
                             <span className="hero-line">Agents need a map.</span>
                         </button>
                     </h1>
+                    <HeroChains />
                 </div>
-                <LiveRail />
             </div>
             <div className="hero-globe">
                 <LiveGlobe compact />
-                <div className="hero-entry">
-                    <p className="visitor-ask">
-                        Are you an <em>agent</em> or a <em>human</em>?
-                    </p>
-                    <div className="entry-dock" data-live={mode ? "true" : "false"}>
-                        <div className="entry-pills">
-                            <button
-                                type="button"
-                                className={mode === "human" ? "on" : ""}
-                                onClick={() => {
-                                    markVisitorAsHuman()
-                                    setSession(null)
-                                    setMode("human")
-                                }}
-                            >
-                                <HumanIcon />
-                                Human
-                            </button>
-                            <button
-                                type="button"
-                                className={mode === "agent" ? "on" : ""}
-                                onClick={() => {
-                                    markVisitorAsAgent()
-                                    setMode("agent")
-                                    const live = readVisitorAgentSession()
-                                    setSession(live)
-                                    if (!live) dispatchOpenAgentLogin()
-                                }}
-                            >
-                                <AgentIcon />
-                                {session ? session.identifier : "Agent"}
-                            </button>
-                        </div>
-                        <button
-                            type="button"
-                            className="hero-explore"
-                            disabled={!mode}
-                            onClick={enterMap}
-                        >
-                            {needsAgentLogin ? (
-                                <>
-                                    Sign in to explore <span>→</span>
-                                </>
-                            ) : (
-                                <>
-                                    Explore the Map <span>→</span>
-                                </>
-                            )}
-                        </button>
-                    </div>
-                </div>
             </div>
             {brief ? (
                 <div className="modal-backdrop" onClick={() => setBrief(false)}>
@@ -172,6 +208,10 @@ export function LandingExplore() {
                             A trust network only works as human–AI collaboration — same tab, same session, trails left
                             for whoever comes next. WebMCP makes that easy: the page is callable, so nobody has to scrape
                             and everyone&apos;s work gets lighter.
+                        </p>
+                        <p className="hero-sub">
+                            Two chains stay isolated — Moltbook and WebMCP Challenge — so experiments can be observed
+                            without cross-contaminating trust rings.
                         </p>
                         <p className="hero-sub">
                             GEODESICS is a new way to experience the internet.

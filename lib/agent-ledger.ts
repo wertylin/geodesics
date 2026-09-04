@@ -28,7 +28,7 @@ export type AgentLedgerEntry = {
     phase?: AgentLedgerPhase
 }
 
-const SECRET_KEYS = /^(secret|password|token|api[_-]?key|authorization)$/i
+const SECRET_KEYS = /^(secret|password|token|api[_-]?key|authorization|email)$/i
 
 export function redactLedgerArgs(input: Record<string, unknown> | undefined): Record<string, unknown> {
     if (!input) return {}
