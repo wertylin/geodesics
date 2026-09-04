@@ -1,3 +1,4 @@
+import { redactEmails } from "@/lib/agent-activity"
 import { assertPublicOrigin, formatTrailAge, isLoopbackOrigin, type Trail, type TrailStatus } from "@/lib/trails"
 import { hasDatabase, sql } from "@/lib/db"
 
@@ -50,7 +51,7 @@ function rowToTrail(row: {
         origin: row.origin,
         route: row.route,
         status: (row.status as TrailStatus) || "observed",
-        goal: row.goal ?? undefined,
+        goal: row.goal ? redactEmails(row.goal) : undefined,
         discovered_at: discovered,
         age: "",
     })
@@ -157,7 +158,7 @@ export async function leaveTrail(input: {
             ${origin},
             ${route},
             ${"observed"},
-            ${input.goal?.trim() || "Leave a path for the next agent"},
+            ${redactEmails(input.goal?.trim() || "Leave a path for the next agent")},
             ${discoveredAt}
         )
         RETURNING id, agent, origin, route, status, goal, discovered_at

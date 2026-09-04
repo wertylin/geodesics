@@ -26,11 +26,16 @@ export function activityStatus(entry: Pick<AgentLedgerEntry, "ok" | "phase">): A
 
 const EMAIL_RE = /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/gi
 
+/** Emails out of trail goals / free text (no truncate). */
+export function redactEmails(raw: string | undefined | null): string {
+    if (!raw) return ""
+    return raw.replace(EMAIL_RE, "[redacted]")
+}
+
 /** Strip emails / long human ids from anything that hits the public feed. */
 export function redactPublicText(raw: string | undefined | null): string | undefined {
     if (!raw) return undefined
-    return raw
-        .replace(EMAIL_RE, "[redacted]")
+    return redactEmails(raw)
         .replace(/\bhuman:[a-zA-Z0-9_-]{8,}\b/g, (m) => `${m.slice(0, 12)}…`)
         .slice(0, 160)
 }
