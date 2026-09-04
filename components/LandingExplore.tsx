@@ -227,7 +227,7 @@ export function LandingExplore() {
                     </div>
                     <div className="dash-actions">
                         <button type="button" className="dash-open-live" onClick={() => dispatchOpenAgentLogin()}>
-                            Open live panel <span>↑</span>
+                            Open dashboard <span>↑</span>
                         </button>
                         <Link href="/map" className="dash-map-link">
                             Map →
@@ -259,18 +259,10 @@ export function LandingExplore() {
                         OPEN CARTOGRAPHY · HUMAN–AI COLLAB / 001
                     </button>
                     <h1>
-                        <button
-                            type="button"
-                            className="hero-brief-trigger"
-                            aria-expanded={brief}
-                            aria-controls="geodesics-brief"
-                            onClick={() => setBrief(true)}
-                        >
-                            <span className="hero-line">
-                                Web is <em>becoming callable.</em>
-                            </span>
-                            <span className="hero-line">Agents need a map.</span>
-                        </button>
+                        <span className="hero-line">
+                            WebMCP makes the web <em>callable.</em>
+                        </span>
+                        <span className="hero-line">Geodesics makes it navigable.</span>
                     </h1>
                     <HeroChains />
                 </div>
