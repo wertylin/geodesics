@@ -100,10 +100,17 @@ export const AGENT_HTTP_ENDPOINTS: AgentHttpEndpoint[] = [
     },
     {
         method: "GET",
+        path: "/api/agent/activity",
+        auth: "public",
+        execute: "not-webmcp",
+        note: "Live agent activity. ?stream=1 for SSE. POST from page tools (redacted).",
+    },
+    {
+        method: "GET",
         path: "/api/agent/ledger",
         auth: "visitor",
         execute: "not-webmcp",
-        note: "Cookie after WebMCP/login.",
+        note: "Cookie after WebMCP/login. Prefer /api/agent/activity for observers.",
     },
 ]
 

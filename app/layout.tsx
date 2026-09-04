@@ -1,6 +1,7 @@
 import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
 import { AgentRuntime } from '@/components/AgentRuntime'
+import { AgentLiveChrome } from '@/components/AgentLiveChrome'
 import './globals.css'
 
 export const metadata: Metadata = {
@@ -23,6 +24,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body>
         {children}
+        <AgentLiveChrome />
         <AgentRuntime />
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>

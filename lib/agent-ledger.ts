@@ -1,3 +1,5 @@
+import { publishActivityLocal } from "@/lib/agent-activity"
+
 export const AGENT_EXPERIMENT_ID = "geodesics-webmcp"
 
 export type AgentLedgerAction =
@@ -6,6 +8,8 @@ export type AgentLedgerAction =
     | "agent.session"
     | "webmcp.tool"
     | "webmcp.navigate"
+
+export type AgentLedgerPhase = "start" | "result"
 
 export type AgentLedgerEntry = {
     id: string
@@ -20,6 +24,8 @@ export type AgentLedgerEntry = {
     args?: Record<string, unknown>
     preview?: string
     view?: string
+    /** start = tool invoked; result = settled */
+    phase?: AgentLedgerPhase
 }
 
 const SECRET_KEYS = /^(secret|password|token|api[_-]?key|authorization)$/i
@@ -62,13 +68,15 @@ export function newLedgerEntryId(): string {
 
 export function reportAgentLedger(
     partial: Omit<AgentLedgerEntry, "id" | "ts" | "experiment" | "host_agent"> & {
+        id?: string
         host_agent?: string
         experiment?: string
+        phase?: AgentLedgerPhase
     }
 ): void {
     if (typeof window === "undefined") return
     const entry: AgentLedgerEntry = {
-        id: newLedgerEntryId(),
+        id: typeof partial.id === "string" ? partial.id : newLedgerEntryId(),
         ts: new Date().toISOString(),
         experiment: partial.experiment ?? AGENT_EXPERIMENT_ID,
         host_agent: partial.host_agent ?? "geodesics",
@@ -80,8 +88,12 @@ export function reportAgentLedger(
         args: redactLedgerArgs(partial.args),
         preview: partial.preview?.slice(0, 480),
         view: partial.view,
+        phase: partial.phase,
     }
-    void fetch("/api/agent/ledger", {
+    // Same-tab + BroadcastChannel — visible before network round-trip.
+    publishActivityLocal(entry)
+    // Public activity ingest (no visitor cookie required) so observers see anon tools too.
+    void fetch("/api/agent/activity", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",

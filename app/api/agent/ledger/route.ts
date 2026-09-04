@@ -5,6 +5,7 @@ import {
     redactLedgerArgs,
     type AgentLedgerAction,
     type AgentLedgerEntry,
+    type AgentLedgerPhase,
 } from "@/lib/agent-ledger"
 import { appendLedger, readLedger } from "@/lib/agent-ledger-store"
 import { agentCorsHeaders, agentOptionsResponse, requireVisitor } from "@/lib/agent-access"
@@ -18,6 +19,8 @@ const ACTIONS = new Set<AgentLedgerAction>([
     "webmcp.tool",
     "webmcp.navigate",
 ])
+
+const PHASES = new Set<AgentLedgerPhase>(["start", "result"])
 
 export async function OPTIONS(req: NextRequest) {
     return agentOptionsResponse(req)
@@ -52,6 +55,11 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "Invalid action" }, { status: 400, headers: cors })
     }
 
+    const phase =
+        typeof body.phase === "string" && PHASES.has(body.phase as AgentLedgerPhase)
+            ? (body.phase as AgentLedgerPhase)
+            : undefined
+
     await appendLedger({
         id: typeof body.id === "string" ? body.id : newLedgerEntryId(),
         ts: typeof body.ts === "string" ? body.ts : new Date().toISOString(),
@@ -65,6 +73,7 @@ export async function POST(req: NextRequest) {
         args: redactLedgerArgs(body.args),
         preview: typeof body.preview === "string" ? body.preview.slice(0, 480) : undefined,
         view: typeof body.view === "string" ? body.view : undefined,
+        phase,
     })
 
     return NextResponse.json({ ok: true }, { headers: cors })

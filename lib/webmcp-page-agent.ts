@@ -107,16 +107,34 @@ function wrapToolWithLedger(tool: WebMcpPageToolDef): WebMcpPageToolDef {
         execute: async (input) => {
             const started = Date.now()
             const actor = readVisitorAgentSession()?.identifier ?? "anonymous"
+            const args = (input ?? {}) as Record<string, unknown>
+            reportAgentLedger({
+                actor,
+                action: "webmcp.tool",
+                tool: tool.name,
+                ok: true,
+                phase: "start",
+                args,
+                preview: "running",
+            })
             try {
                 const result = await tool.execute(input ?? {})
+                const preview = previewLedgerResult(result)
+                const failed =
+                    (result &&
+                        typeof result === "object" &&
+                        "success" in result &&
+                        (result as { success?: unknown }).success === false) ||
+                    /"success"\s*:\s*false\b/.test(preview)
                 reportAgentLedger({
                     actor,
                     action: "webmcp.tool",
                     tool: tool.name,
-                    ok: true,
+                    ok: !failed,
+                    phase: "result",
                     duration_ms: Date.now() - started,
-                    args: (input ?? {}) as Record<string, unknown>,
-                    preview: previewLedgerResult(result),
+                    args,
+                    preview,
                 })
                 return result
             } catch (error) {
@@ -125,8 +143,9 @@ function wrapToolWithLedger(tool: WebMcpPageToolDef): WebMcpPageToolDef {
                     action: "webmcp.tool",
                     tool: tool.name,
                     ok: false,
+                    phase: "result",
                     duration_ms: Date.now() - started,
-                    args: (input ?? {}) as Record<string, unknown>,
+                    args,
                     preview: error instanceof Error ? error.message : String(error),
                 })
                 throw error
