@@ -240,6 +240,9 @@ export function IssuedAgentWebMcp() {
                 })
             },
         })
+
+        registerPageWebMcpTool({
+            name: "geodesics_get_connection_mode",
             description: "Visitor vs unknown connection plus issued visitor session.",
             inputSchema: { type: "object", properties: {} },
             annotations: { readOnlyHint: "true" },
