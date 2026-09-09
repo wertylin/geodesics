@@ -343,6 +343,7 @@ export function EssayField({ voidRefs, extraVoids, playable = true, className }:
                 food: live?.food ?? null,
                 cols,
                 rows,
+                body: live?.body ?? [],
             })
 
             const stage = wrap.closest(".landing-stage")
@@ -417,8 +418,18 @@ export function EssayField({ voidRefs, extraVoids, playable = true, className }:
             kick()
         }
 
+        const onPause = (e: Event) => {
+            const s = snakeRef.current
+            if (!s?.playing || s.dead) return
+            const detail = (e as CustomEvent<{ paused?: boolean }>).detail
+            if (typeof detail?.paused === "boolean") s.paused = detail.paused
+            else s.paused = !s.paused
+            kick()
+        }
+
         window.addEventListener("keydown", onKey)
         window.addEventListener("geodesics-snake-start", onStart)
+        window.addEventListener("geodesics-snake-pause", onPause)
         window.addEventListener("geodesics-snake-kick", kick)
         document.fonts.ready.then(() => {
             preparedRef.current = null
@@ -433,6 +444,7 @@ export function EssayField({ voidRefs, extraVoids, playable = true, className }:
             mo.disconnect()
             window.removeEventListener("keydown", onKey)
             window.removeEventListener("geodesics-snake-start", onStart)
+            window.removeEventListener("geodesics-snake-pause", onPause)
             window.removeEventListener("geodesics-snake-kick", kick)
             publishSnakeSnapshot({
                 playing: false,
@@ -445,6 +457,7 @@ export function EssayField({ voidRefs, extraVoids, playable = true, className }:
                 food: null,
                 cols: 0,
                 rows: 0,
+                body: [],
             })
         }
     }, [voidRefs, playable])
