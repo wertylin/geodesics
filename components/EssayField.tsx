@@ -16,7 +16,9 @@ import {
 } from "@/lib/essay-layout"
 import { fillEssay } from "@/lib/landing-essay"
 import {
+    clearSnakeDeath,
     consumeSnakeTurn,
+    notifySnakeDeath,
     publishSnakeSnapshot,
     type SnakeDir,
 } from "@/lib/snake-runtime"
@@ -36,6 +38,8 @@ type SnakeState = {
     score: number
     tickAcc: number
     dead: boolean
+    /** Sources eaten this run: index, cell, tick timestamp. */
+    sources: { i: number; c: number; r: number; t: number }[]
 }
 
 const LINE_HEIGHT = 16
@@ -115,6 +119,7 @@ function freshSnake(cols: number, rows: number): SnakeState {
         score: 0,
         tickAcc: 0,
         dead: false,
+        sources: [],
     }
 }
 
@@ -145,6 +150,7 @@ export function EssayField({ voidRefs, extraVoids, playable = true, className }:
         let raf = 0
         let alive = true
         let lastTs = performance.now()
+        let deathNotified = false
 
         const ensurePrepared = () => {
             const font = canvasFont()
@@ -291,6 +297,7 @@ export function EssayField({ voidRefs, extraVoids, playable = true, className }:
             s.body.unshift(next)
             if (ate) {
                 s.score += 1
+                s.sources.push({ i: s.score, c: next.c, r: next.r, t: Date.now() })
                 const blocked = new Set(s.body.map((b) => `${b.c},${b.r}`))
                 s.food = randomFood(cols, rows, blocked)
             } else {
@@ -332,6 +339,11 @@ export function EssayField({ voidRefs, extraVoids, playable = true, className }:
 
             const live = snakeRef.current
             const { cols, rows } = gridRef.current
+            if (live?.dead && !deathNotified) {
+                deathNotified = true
+                notifySnakeDeath(live.score, live.sources)
+            }
+            if (live && !live.dead) deathNotified = false
             publishSnakeSnapshot({
                 playing: Boolean(live?.playing),
                 paused: Boolean(live?.paused),
@@ -343,6 +355,8 @@ export function EssayField({ voidRefs, extraVoids, playable = true, className }:
                 food: live?.food ?? null,
                 cols,
                 rows,
+                body: live?.body ?? [],
+                sources: live?.sources ?? [],
             })
 
             const stage = wrap.closest(".landing-stage")
@@ -379,6 +393,8 @@ export function EssayField({ voidRefs, extraVoids, playable = true, className }:
                 if (!s.playing || s.dead) {
                     const { cols, rows } = gridRef.current
                     snakeRef.current = { ...freshSnake(cols, rows), playing: true }
+                    deathNotified = false
+                    clearSnakeDeath()
                 } else {
                     s.paused = !s.paused
                 }
@@ -414,11 +430,23 @@ export function EssayField({ voidRefs, extraVoids, playable = true, className }:
         const onStart = () => {
             const { cols, rows } = gridRef.current
             snakeRef.current = { ...freshSnake(cols, rows), playing: true }
+            deathNotified = false
+            clearSnakeDeath()
+            kick()
+        }
+
+        const onPause = (e: Event) => {
+            const s = snakeRef.current
+            if (!s?.playing || s.dead) return
+            const detail = (e as CustomEvent<{ paused?: boolean }>).detail
+            if (typeof detail?.paused === "boolean") s.paused = detail.paused
+            else s.paused = !s.paused
             kick()
         }
 
         window.addEventListener("keydown", onKey)
         window.addEventListener("geodesics-snake-start", onStart)
+        window.addEventListener("geodesics-snake-pause", onPause)
         window.addEventListener("geodesics-snake-kick", kick)
         document.fonts.ready.then(() => {
             preparedRef.current = null
@@ -433,6 +461,7 @@ export function EssayField({ voidRefs, extraVoids, playable = true, className }:
             mo.disconnect()
             window.removeEventListener("keydown", onKey)
             window.removeEventListener("geodesics-snake-start", onStart)
+            window.removeEventListener("geodesics-snake-pause", onPause)
             window.removeEventListener("geodesics-snake-kick", kick)
             publishSnakeSnapshot({
                 playing: false,
@@ -445,6 +474,8 @@ export function EssayField({ voidRefs, extraVoids, playable = true, className }:
                 food: null,
                 cols: 0,
                 rows: 0,
+                body: [],
+                sources: [],
             })
         }
     }, [voidRefs, playable])
