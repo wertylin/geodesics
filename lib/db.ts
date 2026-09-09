@@ -189,6 +189,17 @@ export async function ensureSchema() {
                 )
             `
             await db`CREATE INDEX IF NOT EXISTS couple_messages_pair_idx ON couple_messages (google_sub, agent, created_at DESC)`
+            await db`
+                CREATE TABLE IF NOT EXISTS snake_scores (
+                    id BIGSERIAL PRIMARY KEY,
+                    player_id TEXT NOT NULL,
+                    name TEXT NOT NULL,
+                    score INT NOT NULL,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                )
+            `
+            await db`CREATE INDEX IF NOT EXISTS snake_scores_rank_idx ON snake_scores (score DESC, created_at ASC)`
+            await db`CREATE INDEX IF NOT EXISTS snake_scores_player_idx ON snake_scores (player_id)`
         })().catch((err) => {
             g.__geodesicsSchema = undefined
             throw err
