@@ -1,6 +1,6 @@
 import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
-import { Cormorant_Garamond, IBM_Plex_Mono, Spectral } from 'next/font/google'
+import { Fraunces, IBM_Plex_Mono, Spectral } from 'next/font/google'
 import Script from 'next/script'
 import { AgentRuntime } from '@/components/AgentRuntime'
 import { AgentLiveChrome } from '@/components/AgentLiveChrome'
@@ -10,9 +10,10 @@ import { THEME_BOOT } from '@/lib/theme'
 import { getWebMcpOriginTrialScriptSrc } from '@/lib/webmcp-origin-trial'
 import './globals.css'
 
-const display = Cormorant_Garamond({
+const display = Fraunces({
   subsets: ['latin'],
   style: ['normal', 'italic'],
+  axes: ['SOFT', 'WONK', 'opsz'],
   variable: '--font-display',
 })
 const body = Spectral({

@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",
+    "@chenglou/pretext": "^0.0.9",
     "@dynamic-labs-sdk/client": "^1.31.1",
     "@dynamic-labs-sdk/evm": "^1.31.1",
     "@dynamic-labs-sdk/react-hooks": "^1.31.1",

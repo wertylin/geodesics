@@ -239,6 +239,47 @@ const PAGE_TOOLS: WebMcpManifestTool[] = [
         availability: "always-mounted",
         execute: "in-page",
     },
+    {
+        name: "geodesics_get_page_state",
+        description:
+            "Landing snapshot: theme, snake status, couple rail. Prefer before snake or chat actions.",
+        inputSchema: { type: "object", properties: {} },
+        annotations: { readOnlyHint: "true" },
+        surface: "always",
+        availability: "always-mounted",
+        execute: "in-page",
+    },
+    {
+        name: "geodesics_snake_state",
+        description: "Snake grid vision: head, dir, length, food, score. No screenshot.",
+        inputSchema: { type: "object", properties: {} },
+        annotations: { readOnlyHint: "true" },
+        surface: "always",
+        availability: "always-mounted",
+        execute: "in-page",
+    },
+    {
+        name: "geodesics_snake_start",
+        description: "Start or restart the landing text-snake (Space equivalent).",
+        inputSchema: { type: "object", properties: {} },
+        surface: "always",
+        availability: "always-mounted",
+        execute: "in-page",
+    },
+    {
+        name: "geodesics_snake_turn",
+        description: "Queue snake direction N|E|S|W. Same as WASD; tick ~9Hz.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                dir: { type: "string", enum: ["N", "E", "S", "W"], description: "Absolute direction." },
+            },
+            required: ["dir"],
+        },
+        surface: "always",
+        availability: "always-mounted",
+        execute: "in-page",
+    },
 ]
 
 export type WebMcpManifest = {
