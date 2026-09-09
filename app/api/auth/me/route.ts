@@ -2,41 +2,61 @@ import { NextRequest, NextResponse } from "next/server"
 import {
     agentCorsHeaders,
     agentOptionsResponse,
+    clearVisitorCookie,
     readVisitorFromRequest,
+    setVisitorCookie,
     VISITOR_COOKIE,
-    visitorCookieClearHeader,
-    visitorCookieHeader,
 } from "@/lib/agent-access"
+import { dynamicAuthConfigured } from "@/lib/dynamic-config"
 import { getHumanByGoogleSub, googleAuthConfigured, publicSession, sessionFromHuman } from "@/lib/human-couple"
 
 export const dynamic = "force-dynamic"
 
-export async function OPTIONS(req: NextRequest) {
+function raceMs<T>(p: Promise<T>, ms: number): Promise<T> {
+    return new Promise((resolve, reject) => {
+        const t = setTimeout(() => reject(new Error("timeout")), ms)
+        p.then(
+            (v) => {
+                clearTimeout(t)
+                resolve(v)
+            },
+            (e) => {
+                clearTimeout(t)
+                reject(e)
+            }
+        )
+    })
+}
+
+export function OPTIONS(req: NextRequest) {
     return agentOptionsResponse(req)
 }
 
 export async function GET(req: NextRequest) {
     const cors = agentCorsHeaders(req)
     let visitor = readVisitorFromRequest(req)
-    let setCookie: string | null = null
+    let refreshCookie = false
+    let clearCookie = false
 
     // Stale / pre-rotation cookie present but invalid → wipe it so clients stop replaying it.
     const raw = req.cookies.get(VISITOR_COOKIE)?.value
     if (raw && !visitor) {
-        setCookie = visitorCookieClearHeader()
+        clearCookie = true
     }
 
-    // Refresh linked_agent from store for human couples (agent may have claimed invite).
+    // Refresh linked_agent from store — never block login hydrate on a wedged DB.
     if (visitor?.auth_type === "human_couple" && visitor.google_sub) {
-        const human = await getHumanByGoogleSub(visitor.google_sub)
-        if (human) {
-            const fresh = sessionFromHuman(human)
-            if (fresh.linked_agent !== visitor.linked_agent) {
-                visitor = fresh
-                setCookie = visitorCookieHeader(fresh, req)
-            } else {
+        try {
+            const human = await raceMs(getHumanByGoogleSub(visitor.google_sub), 2500)
+            if (human) {
+                const fresh = sessionFromHuman(human)
+                if (fresh.linked_agent !== visitor.linked_agent) {
+                    refreshCookie = true
+                }
                 visitor = fresh
             }
+        } catch {
+            /* keep cookie session as-is */
         }
     }
 
@@ -44,11 +64,13 @@ export async function GET(req: NextRequest) {
         {
             authenticated: Boolean(visitor),
             google_configured: googleAuthConfigured(),
+            dynamic_configured: dynamicAuthConfigured(),
             auth_types: ["external_agent", "human_couple"],
             session: visitor ? publicSession(visitor) : null,
         },
         { headers: { ...cors, "Cache-Control": "no-store" } }
     )
-    if (setCookie) res.headers.append("Set-Cookie", setCookie)
+    if (clearCookie) clearVisitorCookie(res)
+    else if (refreshCookie && visitor) setVisitorCookie(res, visitor, req)
     return res
 }

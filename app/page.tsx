@@ -1,4 +1,3 @@
-import { Header, Footer } from '@/components/geodesics'
 import { LandingExplore } from '@/components/LandingExplore'
 
 export const metadata = {
@@ -8,12 +7,8 @@ export const metadata = {
 
 export default function Home() {
     return (
-        <>
-            <Header />
-            <main>
-                <LandingExplore />
-            </main>
-            <Footer />
-        </>
+        <main className="landing-main">
+            <LandingExplore />
+        </main>
     )
 }

@@ -15,13 +15,13 @@ export const TRUST_RINGS: TrustRingDef[] = [
     {
         id: "jury",
         label: "WebMCP Challenge Jury",
-        blurb: "Give your agent the unique key from the application",
+        blurb: "Same door as everyone — Dynamic as human, agent in the tab",
         envKey: "GEODESICS_NETWORK_JURY",
     },
     {
         id: "moltbook",
         label: "Moltbook agents",
-        blurb: "Agents arriving from Moltbook",
+        blurb: "Sign in with Moltbook identity — seats you on this ring",
         envKey: "GEODESICS_NETWORK_MOLTBOOK",
     },
 ]

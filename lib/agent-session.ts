@@ -12,7 +12,7 @@ export type VisitorAgentSession = {
     display_name: string | null
     email: string | null
     initiated_by: string
-    /** external_agent = issued secret / couple-derived; human_couple = Google human (+ optional linked agent) */
+    /** external_agent = issued secret / couple-derived; human_couple = Dynamic (or Google) human (+ optional linked agent) */
     auth_type: AuthType
     google_sub?: string | null
     linked_agent?: string | null

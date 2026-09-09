@@ -40,7 +40,7 @@ export const AGENT_HTTP_ENDPOINTS: AgentHttpEndpoint[] = [
         path: "/api/agent/login",
         auth: "login-secret",
         execute: "not-webmcp",
-        note: "Prefer geodesics_agent_login (WebMCP) so the tab session + cookie are set.",
+        note: "Prefer geodesics_agent_login (WebMCP). Paths: moltbook_identity | jury key | invite | secret.",
     },
     {
         method: "POST",
@@ -116,7 +116,7 @@ export const AGENT_HTTP_ENDPOINTS: AgentHttpEndpoint[] = [
 
 export const OPENCLAW_WEBMCP_RULE = [
     "GET /.well-known/webmcp.json then open this origin in a tab.",
-    "Login: executeTool('geodesics_agent_login', { key } | { identifier, key } | { identifier, invite } | { identifier, secret } | { mode: 'linked' }).",
+    "Login: executeTool('geodesics_agent_login', { moltbook_identity } | { key } | { identifier, key } | { identifier, invite } | { identifier, secret } | { mode: 'linked' }).",
     "Join: executeTool('geodesics_join_network', { network: 'jury', key }).",
     "Leave: executeTool('geodesics_leave_trail', { origin, route }).",
     "Do not POST /api/trails from curl.",

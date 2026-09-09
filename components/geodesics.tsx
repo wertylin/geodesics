@@ -1,11 +1,20 @@
 'use client'
+import Image from 'next/image'
 import Link from 'next/link'
 import { useState } from 'react'
+import { ThemeToggle } from '@/components/ThemeToggle'
 import { type Trail } from '@/lib/trails'
 export function Wordmark(){
     return (
         <Link href="/" className="wordmark" aria-label="GEODESICS">
-            GEODESICS
+            <Image
+                src="/gsl.png"
+                alt="GEODESICS"
+                width={1644}
+                height={957}
+                className="wordmark-logo"
+                priority
+            />
         </Link>
     )
 }
@@ -19,6 +28,7 @@ export function Header(){
                 <a href="/.well-known/webmcp.json">WebMCP</a>
                 <Link href="/AGENT_HANDSHAKE.md">Handshake</Link>
             </nav>
+            <ThemeToggle />
             <a className="challenge-flag" href="https://webmcp.devpost.com/" target="_blank" rel="noreferrer">
                 <i />
                 <span className="flag-full">Running for WebMCP Challenge</span>

@@ -1,6 +1,6 @@
 import postgres from "postgres"
 
-const CLIENT_GEN = 12
+const CLIENT_GEN = 13
 
 const g = globalThis as typeof globalThis & {
     __geodesicsSql?: ReturnType<typeof postgres>
@@ -60,6 +60,9 @@ export async function timed<T>(run: (q: ReturnType<typeof sql>) => Promise<T>, m
 
 export async function ensureSchema() {
     if (!hasDatabase()) return
+    if (g.__geodesicsGen !== CLIENT_GEN) {
+        g.__geodesicsSchema = undefined
+    }
     if (!g.__geodesicsSchema) {
         g.__geodesicsSchema = (async () => {
             const db = sql()
@@ -76,8 +79,10 @@ export async function ensureSchema() {
                 )
             `
             await db`ALTER TABLE trails ADD COLUMN IF NOT EXISTS next TEXT[] NOT NULL DEFAULT ARRAY['/map']::TEXT[]`
+            await db`ALTER TABLE trails ADD COLUMN IF NOT EXISTS network TEXT`
             await db`CREATE INDEX IF NOT EXISTS trails_discovered_idx ON trails (discovered_at DESC)`
             await db`CREATE INDEX IF NOT EXISTS trails_agent_idx ON trails (agent)`
+            await db`CREATE INDEX IF NOT EXISTS trails_network_idx ON trails (network)`
             await db`
                 CREATE TABLE IF NOT EXISTS jury (
                     slug TEXT PRIMARY KEY,

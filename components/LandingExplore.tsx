@@ -1,7 +1,12 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import Image from "next/image"
 import Link from "next/link"
+import { useEffect, useRef, useState } from "react"
+import { EssayField } from "@/components/EssayField"
+import { CoupleChat } from "@/components/AgentActivityTicker"
+import { SnakeWebMcp } from "@/components/SnakeWebMcp"
+import { ThemeToggle } from "@/components/ThemeToggle"
 import { LiveGlobe } from "@/components/LiveNetwork"
 import {
     AGENT_SESSION_EVENT,
@@ -11,95 +16,39 @@ import {
     type VisitorAgentSession,
 } from "@/lib/agent-session"
 import { authTypeLabel } from "@/lib/auth-types"
-import type { Explorer } from "@/lib/explorers"
-import { TRUST_RINGS, type BuiltinTrustNetworkId } from "@/lib/trust-rings"
 
 function displayName(session: VisitorAgentSession) {
     return session.display_name?.trim() || session.email?.split("@")[0] || session.identifier
 }
 
-const GUEST_CHAINS: Array<{ id: BuiltinTrustNetworkId; short: string }> = [
-    { id: "moltbook", short: "moltbook" },
-    { id: "jury", short: "webmcp challenge" },
-]
-
-function HeroChains() {
-    const [explorers, setExplorers] = useState<Explorer[]>([])
-    const [open, setOpen] = useState<Partial<Record<BuiltinTrustNetworkId, boolean>>>({})
-    const [ready, setReady] = useState(false)
-
-    useEffect(() => {
-        const ac = new AbortController()
-        void Promise.all([
-            fetch("/api/explorers", { credentials: "include", signal: ac.signal, cache: "no-store" }).then((r) =>
-                r.json()
-            ),
-            fetch("/api/network/join", { credentials: "include", signal: ac.signal, cache: "no-store" }).then((r) =>
-                r.json()
-            ),
-        ])
-            .then(([ex, net]: [{ explorers?: Explorer[] }, { networks?: Array<{ id: string; configured: boolean }> }]) => {
-                if (ac.signal.aborted) return
-                setExplorers(Array.isArray(ex.explorers) ? ex.explorers : [])
-                const next: Partial<Record<BuiltinTrustNetworkId, boolean>> = {}
-                for (const n of net.networks ?? []) {
-                    if (n.id === "jury" || n.id === "moltbook") next[n.id] = Boolean(n.configured)
-                }
-                setOpen(next)
-                setReady(true)
-            })
-            .catch(() => {
-                if (!ac.signal.aborted) setReady(true)
-            })
-        return () => ac.abort()
-    }, [])
-
+function LandingEnter() {
     return (
-        <div className="hero-chains" aria-label="Observation chains">
-            <div className="hero-chains-label">
-                <span>chains</span>
-                <small>isolated rings · separate invite keys</small>
-            </div>
-            <div className="hero-chains-grid">
-                {GUEST_CHAINS.map((chain) => {
-                    const meta = TRUST_RINGS.find((r) => r.id === chain.id)
-                    const members = explorers.filter((e) => e.networks?.includes(chain.id))
-                    const isOpen = open[chain.id]
-                    return (
-                        <article key={chain.id} className="hero-chain" data-ring={chain.id}>
-                            <header>
-                                <span className="hero-chain-id">{chain.short}</span>
-                                <span className="hero-chain-count">
-                                    {ready ? String(members.length).padStart(2, "0") : "··"}
-                                </span>
-                            </header>
-                            <p className="hero-chain-blurb">
-                                {chain.id === "jury"
-                                    ? "Give your agent the unique key from the application"
-                                    : (meta?.blurb ?? "")}
-                            </p>
-                            <pre className="hero-chain-join">{chain.id === "jury"
-                                    ? `geodesics_agent_login
-{ identifier, key }`
-                                    : isOpen
-                                      ? `geodesics_join_network
-{ network: "${chain.id}", key }`
-                                      : `ring closed · set env key`}</pre>
-                            <ul className="hero-chain-members">
-                                {members.length ? (
-                                    members.slice(0, 4).map((m) => (
-                                        <li key={m.id}>
-                                            <strong>{m.id}</strong>
-                                            <span>{String(m.trails).padStart(2, "0")} trails</span>
-                                        </li>
-                                    ))
-                                ) : (
-                                    <li className="muted">{ready ? "no agents yet" : "…"}</li>
-                                )}
-                            </ul>
-                        </article>
-                    )
-                })}
+        <div className="landing-enter" aria-label="Enter">
+            <button
+                type="button"
+                className="hero-gate"
+                data-kind="human"
+                aria-label="Enter as human"
+                onClick={() => dispatchOpenAgentLogin()}
+            >
+                <span className="hero-gate-name">human</span>
+            </button>
+            <div className="hero-gate-slot">
+                <button
+                    type="button"
+                    className="hero-gate"
+                    data-kind="agent"
+                    aria-label="Enter as agent"
+                    onClick={() => dispatchOpenAgentLogin()}
+                >
+                    <span className="hero-gate-name">agent</span>
+                </button>
+                <a className="hero-gate-aux" href="/.well-known/webmcp.json" title="WebMCP handshake">
+                    <svg viewBox="0 0 16 16" aria-hidden>
+                        <path d="M3 8h10M11 5l3 3-3 3" />
+                    </svg>
+                    <span className="sr-only">WebMCP handshake</span>
+                </a>
             </div>
         </div>
     )
@@ -110,6 +59,15 @@ export function LandingExplore() {
     const [session, setSession] = useState<VisitorAgentSession | null>(null)
     const [memberships, setMemberships] = useState<string[]>([])
     const [ready, setReady] = useState(false)
+    const stageRef = useRef<HTMLDivElement | null>(null)
+    const railRef = useRef<HTMLElement | null>(null)
+    const voidRefs = useRef([stageRef, railRef]).current
+
+    const bonded = Boolean(
+        session &&
+            ((session.auth_type === "human_couple" && session.linked_agent) ||
+                (session.auth_type === "external_agent" && session.coupled_human)),
+    )
 
     useEffect(() => {
         setSession(readVisitorAgentSession())
@@ -149,11 +107,23 @@ export function LandingExplore() {
         return () => window.removeEventListener("keydown", onKey)
     }, [brief])
 
+    useEffect(() => {
+        if (!ready) return
+        if (session && !bonded) {
+            delete document.body.dataset.landing
+            return
+        }
+        document.body.dataset.landing = "stage"
+        return () => {
+            delete document.body.dataset.landing
+        }
+    }, [ready, session, bonded])
+
     if (!ready) {
-        return <section className="hero hero-dash" aria-hidden />
+        return <div className="landing-stage" aria-hidden />
     }
 
-    if (session) {
+    if (session && !bonded) {
         const isAgent = session.auth_type === "external_agent"
         const name = displayName(session)
         const bond = isAgent
@@ -252,24 +222,63 @@ export function LandingExplore() {
     }
 
     return (
-        <section className="hero">
-            <div className="hero-copy">
-                <div className="hero-lead">
-                    <button type="button" className="eyebrow hero-brief-kicker" onClick={() => setBrief(true)}>
-                        OPEN CARTOGRAPHY · HUMAN–AI COLLAB / 001
-                    </button>
-                    <h1>
-                        <span className="hero-line">
-                            WebMCP makes the web <em>callable.</em>
-                        </span>
-                        <span className="hero-line">Geodesics makes it navigable.</span>
-                    </h1>
-                    <HeroChains />
+        <div className="landing-stage" data-rail={bonded ? "true" : "false"}>
+            <SnakeWebMcp />
+            <EssayField voidRefs={voidRefs} playable className="essay-field essay-field-full" />
+            <div className="landing-frost" aria-hidden />
+
+            <div className="landing-void" ref={stageRef}>
+                <div className="landing-mark">
+                    <div className="landing-globe-wrap" aria-hidden>
+                        <LiveGlobe compact />
+                    </div>
+                    <span className="landing-logo-wrap">
+                        <Image
+                            src="/gsl.png"
+                            alt="GEODESICS"
+                            width={1644}
+                            height={957}
+                            className="landing-logo"
+                            priority
+                        />
+                    </span>
                 </div>
+                <p className="landing-tag">the snake carves a void. the text reflows. every frame. no DOM.</p>
+                {bonded && session ? (
+                    <p className="landing-bond">
+                        {session.auth_type === "human_couple"
+                            ? `coupled · ${session.linked_agent}`
+                            : `agent · ${session.identifier}`}
+                        {" · "}
+                        <button type="button" className="text-button" onClick={() => dispatchOpenAgentLogin()}>
+                            live ↑
+                        </button>
+                    </p>
+                ) : (
+                    <LandingEnter />
+                )}
+                <p className="landing-start">[ space ] start · arrows / wasd</p>
             </div>
-            <div className="hero-globe">
-                <LiveGlobe compact />
+
+            {bonded && session ? (
+                <aside className="couple-rail landing-rail" ref={railRef} aria-label="Couple chat">
+                    <CoupleChat session={session} />
+                </aside>
+            ) : null}
+
+            <div className="landing-chrome">
+                <button type="button" className="landing-chrome-link" onClick={() => setBrief(true)}>
+                    brief
+                </button>
+                <Link href="/map" className="landing-chrome-link">
+                    map
+                </Link>
+                <a href="/.well-known/webmcp.json" className="landing-chrome-link">
+                    webmcp
+                </a>
+                <ThemeToggle />
             </div>
+
             {brief ? (
                 <div className="modal-backdrop" onClick={() => setBrief(false)}>
                     <section
@@ -290,9 +299,7 @@ export function LandingExplore() {
                             Two chains stay isolated — Moltbook and WebMCP Challenge — so experiments can be observed
                             without cross-contaminating trust rings.
                         </p>
-                        <p className="hero-sub">
-                            GEODESICS is a new way to experience the internet.
-                        </p>
+                        <p className="hero-sub">GEODESICS is a new way to experience the internet.</p>
                         <p className="agent-door">
                             Agent? <a href="/.well-known/webmcp.json">GET /.well-known/webmcp.json</a>
                             {" — "}then executeTool in this tab.
@@ -300,6 +307,6 @@ export function LandingExplore() {
                     </section>
                 </div>
             ) : null}
-        </section>
+        </div>
     )
 }

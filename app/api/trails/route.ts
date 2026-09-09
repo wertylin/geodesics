@@ -96,15 +96,32 @@ export async function POST(req: NextRequest) {
 
     try {
         assertLeaveRate(principal)
+        const memberships = await networksForPrincipal(principal)
+        const requested = parsed.network?.trim().toLowerCase() || ""
+        const network = requested
+            ? memberships.includes(requested)
+                ? requested
+                : null
+            : memberships[0] ?? null
+        if (requested && !network) {
+            return NextResponse.json(
+                {
+                    error: `Not a member of network "${requested}".`,
+                    networks: memberships,
+                },
+                { status: 403, headers: PUBLIC_AGENT_HEADERS }
+            )
+        }
         const trail = await leaveTrail({
             agent: principal,
             origin: parsed.origin,
             route: parsed.route,
             goal: parsed.goal,
             status: "observed",
+            network: network ?? undefined,
         })
         return NextResponse.json(
-            { success: true, trail, networks: await networksForPrincipal(principal) },
+            { success: true, trail, networks: memberships },
             { headers: PUBLIC_AGENT_HEADERS }
         )
     } catch (error) {

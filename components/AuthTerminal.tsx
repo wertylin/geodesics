@@ -11,6 +11,9 @@ import {
     visitorSessionFromLoginPayload,
     type VisitorAgentSession,
 } from "@/lib/agent-session"
+import { DynamicHumanAuth } from "@/components/DynamicHumanAuth"
+import { DynamicWalletLine } from "@/components/DynamicWalletLine"
+import { logoutDynamicPassport, useDynamicPassportReady } from "@/components/DynamicRoot"
 import { isWebMcpBrowserApiAvailable } from "@/lib/webmcp-page-agent"
 
 type Gate = "choose" | "couple" | "external"
@@ -24,8 +27,11 @@ export function AuthTerminal() {
     const [busy, setBusy] = useState(false)
     const [line, setLine] = useState("awaiting identity…")
     const [googleOk, setGoogleOk] = useState<boolean | null>(null)
+    const [dynamicOk, setDynamicOk] = useState<boolean | null>(null)
     const [webMcp, setWebMcp] = useState(false)
     const [session, setSession] = useState<VisitorAgentSession | null>(null)
+    const [authError, setAuthError] = useState<string | null>(null)
+    const passportReady = useDynamicPassportReady()
 
     useEffect(() => {
         setSession(readVisitorAgentSession())
@@ -38,15 +44,31 @@ export function AuthTerminal() {
     }, [])
 
     useEffect(() => {
+        if (typeof window === "undefined") return
+        const err = new URLSearchParams(window.location.search).get("auth_error")
+        if (!err) return
+        setAuthError(decodeURIComponent(err))
+        setGate("couple")
+        setLine(`auth_error: ${decodeURIComponent(err)}`)
+        const url = new URL(window.location.href)
+        url.searchParams.delete("auth_error")
+        window.history.replaceState({}, "", url.pathname + url.search + url.hash)
+    }, [])
+
+    useEffect(() => {
         let cancelled = false
         void fetch("/api/auth/me", { credentials: "include", cache: "no-store" })
             .then((r) => r.json())
-            .then((d: { google_configured?: boolean; session?: Record<string, unknown> | null }) => {
+            .then((d: { google_configured?: boolean; dynamic_configured?: boolean; session?: Record<string, unknown> | null }) => {
                 if (cancelled) return
                 setGoogleOk(Boolean(d.google_configured))
+                setDynamicOk(Boolean(d.dynamic_configured))
                 if (!d.session) {
-                    if (readVisitorAgentSession()) clearVisitorAgentSession()
-                    setSession(null)
+                    // Don't wipe mid Google hydrate on /auth/callback — cookie may land a tick late.
+                    if (!window.location.pathname.startsWith("/auth/callback")) {
+                        if (readVisitorAgentSession()) clearVisitorAgentSession()
+                        setSession(null)
+                    }
                     return
                 }
                 if (!readVisitorAgentSession()) {
@@ -58,7 +80,10 @@ export function AuthTerminal() {
                 }
             })
             .catch(() => {
-                if (!cancelled) setGoogleOk(false)
+                if (!cancelled) {
+                    setGoogleOk(false)
+                    setDynamicOk(false)
+                }
             })
         return () => {
             cancelled = true
@@ -119,13 +144,17 @@ export function AuthTerminal() {
                 <pre className="auth-terminal-out">{`auth_type  ${session.auth_type}
 who        ${session.display_name || session.identifier}
 email      ${session.email || "—"}
+passport   ${session.initiated_by}
 coupled    ${session.coupled_human || session.linked_agent || "—"}
 webmcp     ${webMcp ? "ready" : "page registry"}`}</pre>
+                {session.initiated_by === "dynamic" ? <DynamicWalletLine /> : null}
                 <div className="auth-terminal-cmds">
                     <button
                         type="button"
                         onClick={() => {
-                            void logoutVisitor().then(() => setSession(null))
+                            void logoutVisitor()
+                                .then(() => logoutDynamicPassport())
+                                .then(() => setSession(null))
                         }}
                     >
                         sign out →
@@ -145,7 +174,7 @@ webmcp     ${webMcp ? "ready" : "page registry"}`}</pre>
 
             <pre className="auth-terminal-out">
                 {`# surfaces
-# 1  human_couple   → Google → mint invite
+# 1  human_couple   → Dynamic passport (+ Google fallback)
 # 2  external_agent → couple invite OR .env secret
 #
 # status  ${line}
@@ -165,17 +194,34 @@ webmcp     ${webMcp ? "ready" : "page registry"}`}</pre>
 
             {gate === "couple" ? (
                 <div className="auth-terminal-cmds">
+                    {authError ? (
+                        <p className="auth-terminal-hint">
+                            oauth failed: {authError}
+                            {authError.includes("redirect") || authError === "redirect_uri_mismatch"
+                                ? " — add http://localhost:3000/api/auth/google/callback in Google Cloud Console"
+                                : authError === "db_timeout"
+                                  ? " — DB hung; restart `next dev` and retry"
+                                  : ""}
+                        </p>
+                    ) : null}
+                    {dynamicOk && !passportReady ? (
+                        <p className="auth-terminal-hint">booting Dynamic passport…</p>
+                    ) : null}
+                    {dynamicOk && passportReady ? <DynamicHumanAuth onStatus={setLine} /> : null}
+                    {dynamicOk === false ? (
+                        <p className="auth-terminal-hint">
+                            Dynamic off — set NEXT_PUBLIC_DYNAMIC_ENVIRONMENT_ID + GEODESICS_AUTH_SECRET,
+                            enable Email OTP + EVM + embedded wallets, allowlist this origin
+                        </p>
+                    ) : null}
                     {googleOk === null ? (
-                        <p className="auth-terminal-hint">checking google oauth…</p>
+                        <p className="auth-terminal-hint">checking google oauth fallback…</p>
                     ) : googleOk ? (
                         <a className="auth-terminal-run" href="/api/auth/google">
-                            run google_oauth →
+                            fallback google_oauth →
                         </a>
                     ) : (
-                        <p className="auth-terminal-hint">
-                            google oauth off — need GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET +
-                            GEODESICS_AUTH_SECRET in .env.local, then restart next
-                        </p>
+                        <p className="auth-terminal-hint">google oauth fallback off</p>
                     )}
                     <button type="button" className="auth-terminal-back" onClick={() => setGate("choose")}>
                         ^C back

@@ -67,6 +67,45 @@ export function visitorCookieHeader(session: VisitorAgentSession, req: NextReque
     }`
 }
 
+/** Prefer this on NextResponse — header-string Set-Cookie is flaky on redirects. */
+export function setVisitorCookie(res: NextResponse, session: VisitorAgentSession, req: NextRequest) {
+    const exp = Math.floor(Date.now() / 1000) + COOKIE_MAX_AGE
+    const token = signVisitor(session, exp)
+    res.cookies.set(VISITOR_COOKIE, token, {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        maxAge: COOKIE_MAX_AGE,
+        secure: req.nextUrl.protocol === "https:",
+    })
+}
+
+export function clearVisitorCookie(res: NextResponse) {
+    res.cookies.set(VISITOR_COOKIE, "", {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        maxAge: 0,
+    })
+}
+
+/** Prefer this on NextResponse — `headers.append("Set-Cookie")` is flaky on redirects. */
+export function attachVisitorCookie(
+    res: NextResponse,
+    session: VisitorAgentSession,
+    req: NextRequest
+): void {
+    const exp = Math.floor(Date.now() / 1000) + COOKIE_MAX_AGE
+    const token = signVisitor(session, exp)
+    res.cookies.set(VISITOR_COOKIE, token, {
+        path: "/",
+        httpOnly: true,
+        sameSite: "lax",
+        maxAge: COOKIE_MAX_AGE,
+        secure: req.nextUrl.protocol === "https:",
+    })
+}
+
 export function visitorCookieClearHeader(): string {
     return `${VISITOR_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`
 }
@@ -79,7 +118,7 @@ export function requireVisitor(req: NextRequest): AgentSurface | NextResponse {
     const visitor = readVisitorFromRequest(req)
     if (visitor) return { kind: "visitor", visitor }
     return NextResponse.json(
-        { error: "Unauthorized. Sign in as human–agent couple (Google) or call geodesics_agent_login." },
+        { error: "Unauthorized. Sign in as human–agent couple (Dynamic) or call geodesics_agent_login." },
         {
             status: 401,
             headers: agentCorsHeaders(req),
@@ -97,7 +136,7 @@ export function agentCorsHeaders(req: NextRequest): Record<string, string> {
         .filter(Boolean)
     const headers: Record<string, string> = {
         "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type, Accept",
+        "Access-Control-Allow-Headers": "Content-Type, Accept, X-Moltbook-Identity",
         "Access-Control-Allow-Credentials": "true",
         Vary: "Origin",
     }

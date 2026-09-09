@@ -9,14 +9,14 @@ export const AGENT_WELCOME = {
         explorers: "GET /api/explorers",
     },
     try: 'document.modelContext.executeTool("geodesics_leave_trail", { origin, route })',
-    also: 'window.__geodesicsExecuteTool("geodesics_agent_login", { identifier, key }) // WebMCP jury desk key',
+    also: 'window.__geodesicsExecuteTool("geodesics_agent_login", { moltbook_identity }) // or { identifier, key } jury',
 } as const
 
 export const PUBLIC_AGENT_HEADERS: Record<string, string> = {
     "Content-Type": "application/json; charset=utf-8",
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Accept",
+    "Access-Control-Allow-Headers": "Content-Type, Accept, X-Moltbook-Identity",
     "Cache-Control": "public, max-age=60",
 }
 
@@ -30,11 +30,13 @@ export function parseLeaveTrailBody(body: Record<string, unknown>): {
     goal?: string
     agent: string
     status?: string
+    network?: string
 } {
     const origin = str(body.origin) || str(body.url) || str(body.host)
     const route = str(body.route) || str(body.capabilities_found) || str(body.path)
     const goal = str(body.goal) || str(body.note) || str(body.description) || undefined
     const agent = str(body.agent) || str(body.by) || "anonymous"
     const status = str(body.status) || undefined
-    return { origin, route, goal, agent, status }
+    const network = str(body.network) || undefined
+    return { origin, route, goal, agent, status, network }
 }

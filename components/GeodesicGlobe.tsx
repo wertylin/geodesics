@@ -428,14 +428,17 @@ export function GeodesicGlobe({
 
             ctx.clearRect(0, 0, w, h)
 
-            const accent = live ? [110, 232, 210] : [198, 243, 107]
+            const mode = document.documentElement.getAttribute("data-theme")
+            const organism = mode === "organizma" || mode === "organism"
+            const dark = mode === "dark" || organism
+            const accent = organism ? (live ? [255, 48, 64] : [255, 32, 48]) : live ? [196, 35, 50] : [139, 13, 22]
             const [ar, ag, ab] = accent
             const rgba = (a: number) => `rgba(${ar},${ag},${ab},${a})`
 
             const halo = ctx.createRadialGradient(cx, cy, r * 0.7, cx, cy, r * 1.45)
-            halo.addColorStop(0, rgba(live ? 0.16 : 0.07))
-            halo.addColorStop(0.55, rgba(live ? 0.07 : 0.03))
-            halo.addColorStop(1, "rgba(10,12,11,0)")
+            halo.addColorStop(0, rgba(live ? 0.28 : organism ? 0.2 : 0.12))
+            halo.addColorStop(0.55, rgba(live ? 0.12 : organism ? 0.08 : 0.05))
+            halo.addColorStop(1, dark ? "rgba(0,0,0,0)" : "rgba(244,235,227,0)")
             ctx.fillStyle = halo
             ctx.beginPath()
             ctx.arc(cx, cy, r * 1.45, 0, Math.PI * 2)
@@ -444,14 +447,28 @@ export function GeodesicGlobe({
             const xf = (v: V3) => project(rot(v, Y, P), cx, cy, r)
 
             const disk = ctx.createRadialGradient(cx - r * 0.28, cy - r * 0.32, r * 0.1, cx, cy, r)
-            if (live) {
-                disk.addColorStop(0, "#1a2a28")
-                disk.addColorStop(0.55, "#101a19")
-                disk.addColorStop(1, "#070b0a")
+            if (organism) {
+                disk.addColorStop(0, live ? "#1a0a12" : "#12080e")
+                disk.addColorStop(0.55, "#07040a")
+                disk.addColorStop(1, "#000000")
+            } else if (dark) {
+                if (live) {
+                    disk.addColorStop(0, "#3a1820")
+                    disk.addColorStop(0.55, "#241014")
+                    disk.addColorStop(1, "#12080a")
+                } else {
+                    disk.addColorStop(0, "#2e141a")
+                    disk.addColorStop(0.55, "#1c0e12")
+                    disk.addColorStop(1, "#100709")
+                }
+            } else if (live) {
+                disk.addColorStop(0, "#f8f1ea")
+                disk.addColorStop(0.55, "#ead8cc")
+                disk.addColorStop(1, "#c9a090")
             } else {
-                disk.addColorStop(0, "#18211c")
-                disk.addColorStop(0.55, "#101613")
-                disk.addColorStop(1, "#070908")
+                disk.addColorStop(0, "#f6efe8")
+                disk.addColorStop(0.55, "#e6d4c6")
+                disk.addColorStop(1, "#c4a090")
             }
             ctx.beginPath()
             ctx.arc(cx, cy, r * 0.99, 0, Math.PI * 2)
@@ -463,13 +480,21 @@ export function GeodesicGlobe({
             for (const line of grid) {
                 const pts = mapLine(line)
                 strokeChain(ctx, pts, false, (c) => {
-                    c.strokeStyle = live ? "rgba(90,140,130,0.22)" : "rgba(102,116,101,0.16)"
+                    c.strokeStyle = organism
+                        ? "rgba(77,232,255,0.12)"
+                        : live
+                          ? "rgba(139,13,22,0.18)"
+                          : "rgba(90,40,42,0.14)"
                     c.lineWidth = 0.7
                 })
             }
             for (const ring of land) {
                 strokeChain(ctx, mapLine(ring), false, (c) => {
-                    c.strokeStyle = live ? "rgba(140,200,190,0.22)" : "rgba(157,176,150,0.18)"
+                    c.strokeStyle = organism
+                        ? "rgba(77,232,255,0.22)"
+                        : live
+                          ? "rgba(196,35,50,0.28)"
+                          : "rgba(139,13,22,0.2)"
                     c.lineWidth = 1
                 })
             }
@@ -492,13 +517,21 @@ export function GeodesicGlobe({
 
             for (const line of grid) {
                 strokeChain(ctx, mapLine(line), true, (c) => {
-                    c.strokeStyle = live ? "rgba(120,180,170,0.45)" : "rgba(121,138,120,0.38)"
+                    c.strokeStyle = organism
+                        ? "rgba(77,232,255,0.28)"
+                        : live
+                          ? "rgba(139,13,22,0.38)"
+                          : "rgba(90,40,42,0.28)"
                     c.lineWidth = 0.85
                 })
             }
             for (const ring of land) {
                 strokeChain(ctx, mapLine(ring), true, (c) => {
-                    c.strokeStyle = live ? "rgba(180,230,220,0.62)" : "rgba(201,214,190,0.55)"
+                    c.strokeStyle = organism
+                        ? "rgba(77,232,255,0.45)"
+                        : live
+                          ? "rgba(196,35,50,0.55)"
+                          : "rgba(139,13,22,0.42)"
                     c.lineWidth = 1.15
                 })
             }
@@ -528,7 +561,7 @@ export function GeodesicGlobe({
                 })
             }
 
-            const nodeFill = live ? "#6ee8d2" : "#c6f36b"
+            const nodeFill = organism ? "#ff3040" : live ? "#c42332" : "#8b0d16"
             for (const arc of arcs) {
                 if (!isHot(arc.trailId)) continue
                 const t = (now / (live ? 2000 : 2800) + (arc.seed % 1000) / 1000) % 1
@@ -549,7 +582,7 @@ export function GeodesicGlobe({
                 const hot = hoverKey.current === node.key
                 ctx.beginPath()
                 ctx.arc(p.x, p.y, hot ? 5.4 : onTrail ? 3.6 : 2.2, 0, Math.PI * 2)
-                ctx.fillStyle = hot || onTrail ? nodeFill : "#0a0c0b"
+                ctx.fillStyle = hot || onTrail ? nodeFill : dark ? "#000000" : "#f4ebe3"
                 ctx.fill()
                 ctx.strokeStyle = onTrail ? nodeFill : rgba(0.35)
                 ctx.lineWidth = onTrail ? 1.4 : 1
@@ -564,8 +597,8 @@ export function GeodesicGlobe({
             ctx.stroke()
 
             const shade = ctx.createLinearGradient(cx - r, cy, cx + r, cy)
-            shade.addColorStop(0, "rgba(0,0,0,0.35)")
-            shade.addColorStop(0.45, "rgba(0,0,0,0)")
+            shade.addColorStop(0, dark ? "rgba(0,0,0,0.45)" : "rgba(90,40,42,0.22)")
+            shade.addColorStop(0.45, dark ? "rgba(0,0,0,0)" : "rgba(90,40,42,0)")
             shade.addColorStop(1, rgba(0.08))
             ctx.beginPath()
             ctx.arc(cx, cy, r * 0.99, 0, Math.PI * 2)

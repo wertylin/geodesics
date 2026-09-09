@@ -6,6 +6,7 @@ import {
     matchJuryCode,
     seedJury,
 } from "@/lib/jury"
+import { moltbookAuthConfigured } from "@/lib/moltbook-identity"
 import {
     addNetworkMember,
     isBuiltinTrustNetworkId,
@@ -30,7 +31,10 @@ export async function GET(req: NextRequest) {
     const networks = await listAllTrustNetworks()
     const gate = requireVisitor(req)
     if (gate instanceof NextResponse) {
-        return NextResponse.json({ networks, member: null, memberships: [] }, { headers: cors })
+        return NextResponse.json(
+            { networks, member: null, memberships: [], moltbook_auth: moltbookAuthConfigured() },
+            { headers: cors }
+        )
     }
     const [memberships, owned] = await Promise.all([
         networksForPrincipal(gate.visitor.identifier),
@@ -44,6 +48,7 @@ export async function GET(req: NextRequest) {
             member: gate.visitor.identifier,
             memberships,
             owned: owned.map((n) => n.id),
+            moltbook_auth: moltbookAuthConfigured(),
         },
         { headers: cors }
     )
