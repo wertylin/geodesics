@@ -16,6 +16,7 @@ import {
 } from "@/lib/agent-session"
 import { SnakeLeaderboard } from "@/components/SnakeLeaderboard"
 import { SnakeScoreCard } from "@/components/SnakeScoreCard"
+import { AgentDock } from "@/components/AgentDock"
 import { authTypeLabel } from "@/lib/auth-types"
 import { SNAKE_DEATH_CLEAR_EVENT, SNAKE_DEATH_EVENT } from "@/lib/snake-runtime"
 
@@ -299,6 +300,7 @@ export function LandingExplore() {
             <div className="landing-frost" aria-hidden />
 
             <SnakeLeaderboard highlightRank={highlightRank} />
+            <AgentDock />
 
             {death ? (
                 <SnakeScoreCard

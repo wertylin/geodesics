@@ -13,6 +13,8 @@ export type SnakeSnapshot = {
     rows: number
     /** Full snake body, head first. Agents use this for self-collision avoidance. */
     body: { c: number; r: number }[]
+    /** Sources eaten this run (the snake eats sources, not pellets). */
+    sources: { i: number; c: number; r: number; t: number }[]
 }
 
 let snap: SnakeSnapshot = {
@@ -27,6 +29,7 @@ let snap: SnakeSnapshot = {
     cols: 0,
     rows: 0,
     body: [],
+    sources: [],
 }
 
 let pendingTurn: SnakeDir | null = null
@@ -92,4 +95,18 @@ export function snakeBest(): number {
 
 export function noteScore(score: number) {
     if (score > bestScore) bestScore = score
+}
+
+export const SNAKE_DEATH_EVENT = "geodesics-snake-death"
+export const SNAKE_DEATH_CLEAR_EVENT = "geodesics-snake-death-clear"
+
+export function notifySnakeDeath(score: number, sources?: { i: number; c: number; r: number; t: number }[]) {
+    if (typeof window === "undefined") return
+    noteScore(score)
+    window.dispatchEvent(new CustomEvent(SNAKE_DEATH_EVENT, { detail: { score, sources: sources ?? [] } }))
+}
+
+export function clearSnakeDeath() {
+    if (typeof window === "undefined") return
+    window.dispatchEvent(new Event(SNAKE_DEATH_CLEAR_EVENT))
 }

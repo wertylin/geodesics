@@ -38,6 +38,8 @@ type SnakeState = {
     score: number
     tickAcc: number
     dead: boolean
+    /** Sources eaten this run: index, cell, tick timestamp. */
+    sources: { i: number; c: number; r: number; t: number }[]
 }
 
 const LINE_HEIGHT = 16
@@ -117,6 +119,7 @@ function freshSnake(cols: number, rows: number): SnakeState {
         score: 0,
         tickAcc: 0,
         dead: false,
+        sources: [],
     }
 }
 
@@ -294,6 +297,7 @@ export function EssayField({ voidRefs, extraVoids, playable = true, className }:
             s.body.unshift(next)
             if (ate) {
                 s.score += 1
+                s.sources.push({ i: s.score, c: next.c, r: next.r, t: Date.now() })
                 const blocked = new Set(s.body.map((b) => `${b.c},${b.r}`))
                 s.food = randomFood(cols, rows, blocked)
             } else {
@@ -337,7 +341,7 @@ export function EssayField({ voidRefs, extraVoids, playable = true, className }:
             const { cols, rows } = gridRef.current
             if (live?.dead && !deathNotified) {
                 deathNotified = true
-                notifySnakeDeath(live.score)
+                notifySnakeDeath(live.score, live.sources)
             }
             if (live && !live.dead) deathNotified = false
             publishSnakeSnapshot({
@@ -352,6 +356,7 @@ export function EssayField({ voidRefs, extraVoids, playable = true, className }:
                 cols,
                 rows,
                 body: live?.body ?? [],
+                sources: live?.sources ?? [],
             })
 
             const stage = wrap.closest(".landing-stage")
@@ -470,6 +475,7 @@ export function EssayField({ voidRefs, extraVoids, playable = true, className }:
                 cols: 0,
                 rows: 0,
                 body: [],
+                sources: [],
             })
         }
     }, [voidRefs, playable])
