@@ -144,7 +144,7 @@ export async function POST(req: NextRequest) {
     // ── human paths ──
     if (visitor.auth_type !== "human_couple" || !visitor.google_sub) {
         return NextResponse.json(
-            { error: "Sign in as human–agent couple (Google) first." },
+            { error: "Sign in as human–agent couple (Dynamic) first." },
             { status: 403, headers: cors }
         )
     }

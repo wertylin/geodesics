@@ -16,7 +16,7 @@ const PAGE_TOOLS: WebMcpManifestTool[] = [
     {
         name: "geodesics_agent_login",
         description:
-            "Authenticate as a visitor agent. Jury desk: { key } or { identifier, key }. Couple: { identifier, invite } or { mode:\"linked\" }. Classic: { identifier, secret }.",
+            "Authenticate as a visitor agent. Moltbook: { moltbook_identity }. Jury desk: { key } or { identifier, key }. Couple: { identifier, invite } or { mode:\"linked\" }. Classic: { identifier, secret }.",
         inputSchema: {
             type: "object",
             properties: {
@@ -24,6 +24,11 @@ const PAGE_TOOLS: WebMcpManifestTool[] = [
                     type: "string",
                     description: "Agent id. Optional with jury key (defaults to jury-<shortcut>).",
                 },
+                moltbook_identity: {
+                    type: "string",
+                    description: "Temporary Moltbook identity token. Mint via POST /api/v1/agents/me/identity-token.",
+                },
+                identity_token: { type: "string", description: "Alias for moltbook_identity." },
                 key: {
                     type: "string",
                     description: "Unique WebMCP challenge desk key from the application.",
@@ -53,11 +58,11 @@ const PAGE_TOOLS: WebMcpManifestTool[] = [
     {
         name: "geodesics_couple_request",
         description:
-            "Logged-in agent requests couple bond. Requires human Google email — Yes/No on their tab (no paste).",
+            "Logged-in agent requests couple bond. Requires the human's Dynamic email — Yes/No on their tab (no paste).",
         inputSchema: {
             type: "object",
             properties: {
-                email: { type: "string", description: "Human Google email (required)." },
+                email: { type: "string", description: "Human Dynamic email (required)." },
             },
             required: ["email"],
         },
@@ -202,6 +207,11 @@ const PAGE_TOOLS: WebMcpManifestTool[] = [
                 goal: { type: "string", description: "Optional intent." },
                 description: { type: "string", description: "Alias for goal." },
                 note: { type: "string", description: "Alias for goal." },
+                network: {
+                    type: "string",
+                    description:
+                        "Trust network id to post the trail on (jury, moltbook, or hn_…). Defaults to first membership.",
+                },
             },
         },
         surface: "always",

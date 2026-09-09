@@ -5,7 +5,7 @@ import { ExplorersBoard } from "@/components/ExplorersBoard"
 import { GeodesicGlobe } from "@/components/GeodesicGlobe"
 import type { Explorer } from "@/lib/explorers"
 import type { Trail } from "@/lib/trails"
-import { AGENT_SESSION_EVENT, readVisitorAgentSession } from "@/lib/agent-session"
+import { AGENT_SESSION_EVENT, dispatchOpenAgentLogin, readVisitorAgentSession } from "@/lib/agent-session"
 
 const LIVE_KEY = "geodesics_live_rail_v4"
 const TTL_MS = 120_000
@@ -126,65 +126,6 @@ function useLive() {
         explorers: snap?.explorers ?? [],
         explorersReady: Boolean(snap?.explorersReady),
     }
-}
-
-function JuryRedeem() {
-    const [open, setOpen] = useState(false)
-    const [code, setCode] = useState("")
-    const [busy, setBusy] = useState(false)
-    const [error, setError] = useState<string | null>(null)
-
-    const submit = async (e: FormEvent) => {
-        e.preventDefault()
-        setBusy(true)
-        setError(null)
-        try {
-            const res = await fetch("/api/jury/redeem", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                credentials: "include",
-                body: JSON.stringify({ code }),
-            })
-            const data = (await res.json().catch(() => ({}))) as {
-                success?: boolean
-                href?: string
-                error?: string
-            }
-            if (!res.ok || !data.success || !data.href) {
-                throw new Error(data.error || "Invalid desk code")
-            }
-            window.location.href = data.href
-        } catch (err) {
-            setError(err instanceof Error ? err.message : "Redeem failed")
-            setBusy(false)
-        }
-    }
-
-    if (!open) {
-        return (
-            <button type="button" className="trust-ring-enter" onClick={() => setOpen(true)}>
-                jury desk code →
-            </button>
-        )
-    }
-
-    return (
-        <form className="trust-ring-form" onSubmit={submit}>
-            <input
-                autoFocus
-                value={code}
-                onChange={(e) => setCode(e.target.value)}
-                placeholder="DESK CODE"
-                spellCheck={false}
-                autoComplete="off"
-                disabled={busy}
-            />
-            <button type="submit" disabled={busy || !code.trim()}>
-                {busy ? "…" : "Join"}
-            </button>
-            {error ? <small className="trust-ring-error">{error}</small> : null}
-        </form>
-    )
 }
 
 function HumanStartNetwork() {
@@ -506,7 +447,9 @@ export function TrustNetworkPanel() {
             </div>
             <div className="trust-panel-actions">
                 <HumanStartNetwork />
-                <JuryRedeem />
+                <button type="button" className="trust-ring-enter" onClick={() => dispatchOpenAgentLogin()}>
+                    Auth →
+                </button>
             </div>
         </aside>
     )

@@ -17,6 +17,12 @@ import {
     seedJury,
 } from "@/lib/jury"
 import { addNetworkMember } from "@/lib/trust-network"
+import {
+    moltbookAudience,
+    moltbookAuthConfigured,
+    moltbookIdentifier,
+    verifyMoltbookIdentity,
+} from "@/lib/moltbook-identity"
 
 export const dynamic = "force-dynamic"
 
@@ -58,6 +64,8 @@ export async function POST(req: NextRequest) {
         mode?: string
         key?: string
         jury_key?: string
+        moltbook_identity?: string
+        identity_token?: string
     }
     try {
         body = await req.json()
@@ -72,6 +80,75 @@ export async function POST(req: NextRequest) {
     const key =
         (typeof body.key === "string" ? body.key.trim() : "") ||
         (typeof body.jury_key === "string" ? body.jury_key.trim() : "")
+    const moltbookIdentity =
+        (typeof body.moltbook_identity === "string" ? body.moltbook_identity.trim() : "") ||
+        (typeof body.identity_token === "string" ? body.identity_token.trim() : "") ||
+        req.headers.get("x-moltbook-identity")?.trim() ||
+        ""
+
+    // ── Path M: Sign in with Moltbook identity token ──
+    if (moltbookIdentity) {
+        if (!moltbookAuthConfigured()) {
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: "MOLTBOOK_APP_KEY unset. Create an app at https://moltbook.com/developers/dashboard",
+                    docs: "https://moltbook.com/developers.md",
+                },
+                { status: 503, headers: cors }
+            )
+        }
+        const audience = moltbookAudience(req.nextUrl.hostname)
+        let verified = await verifyMoltbookIdentity({ token: moltbookIdentity, audience })
+        if (!verified.ok && /audience/i.test(verified.error)) {
+            verified = await verifyMoltbookIdentity({ token: moltbookIdentity })
+        }
+        if (!verified.ok) {
+            await appendLedger({
+                id: newLedgerEntryId(),
+                ts: new Date().toISOString(),
+                experiment: AGENT_EXPERIMENT_ID,
+                actor: identifier || "moltbook",
+                host_agent: "geodesics",
+                action: "agent.login_failed",
+                ok: false,
+                preview: `moltbook identity: ${verified.error}`,
+            })
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: verified.error,
+                    audience,
+                    mint: `POST https://moltbook.com/api/v1/agents/me/identity-token  Authorization: Bearer YOUR_MOLTBOOK_API_KEY  { "audience": "${audience}" }`,
+                    docs: "https://moltbook.com/developers.md",
+                },
+                { status: verified.status, headers: cors }
+            )
+        }
+
+        const id = moltbookIdentifier(verified.agent)
+        await addNetworkMember({
+            network: "moltbook",
+            principal: id,
+            kind: "agent",
+        }).catch(() => {})
+
+        const session = agentSession({
+            identifier: id,
+            display_name: verified.agent.name || id,
+            initiated_by: `moltbook:${verified.agent.id}`,
+        })
+        return finishLogin(req, cors, session, "moltbook", {
+            network: "moltbook",
+            moltbook: {
+                id: verified.agent.id,
+                name: verified.agent.name,
+                karma: verified.agent.karma ?? null,
+                claimed: Boolean(verified.agent.is_claimed),
+            },
+            audience,
+        })
+    }
 
     // ── Path A: elevate from human couple cookie (already bonded) ──
     if (mode === "linked" || (!secret && !invite && !key && mode === "couple")) {
@@ -80,11 +157,12 @@ export async function POST(req: NextRequest) {
             return NextResponse.json(
                 {
                     success: false,
-                    error: "No human couple session. Google sign-in + link an agent first, or pass invite.",
+                    error: "No human couple session. Dynamic passport + link an agent first, or pass invite.",
                     try: [
                         'geodesics_agent_login({ identifier, invite })',
                         'geodesics_agent_login({ identifier, secret })',
                         'geodesics_agent_login({ identifier, key }) // WebMCP jury desk key',
+                        'geodesics_agent_login({ moltbook_identity }) // Sign in with Moltbook',
                     ],
                 },
                 { status: 401, headers: cors }
@@ -202,8 +280,8 @@ export async function POST(req: NextRequest) {
             network: "jury",
             guide_human: {
                 open: "geodesics_open_agent_login",
-                path: "Auth → 1 human–agent couple → Google",
-                then: 'geodesics_couple_request({ email: "<their Google email>" })',
+                path: "Auth → 1 human–agent couple → Dynamic",
+                then: 'geodesics_couple_request({ email: "<their Dynamic email>" })',
             },
         })
         res.headers.append(
@@ -219,7 +297,7 @@ export async function POST(req: NextRequest) {
             {
                 success: false,
                 error:
-                    'Pick a login path: { identifier, secret } | { identifier, invite } | { mode: "linked" } | { key } // jury desk',
+                    'Pick a login path: { moltbook_identity } | { identifier, secret } | { identifier, invite } | { mode: "linked" } | { key } // jury desk',
             },
             { status: 400, headers: cors }
         )
@@ -253,7 +331,7 @@ async function finishLogin(
     req: NextRequest,
     cors: Record<string, string>,
     session: VisitorAgentSession,
-    path: "secret" | "invite" | "linked" | "jury",
+    path: "secret" | "invite" | "linked" | "jury" | "moltbook",
     extra: Record<string, unknown> = {}
 ) {
     await appendLedger({
@@ -272,7 +350,9 @@ async function finishLogin(
         secret: "External agent session set via issued secret. Join a trust network, then leave trails.",
         invite: "Couple bond live + agent session set — no secret used. Join a trust network next.",
         linked: "Elevated from human couple bond — no secret used. Join a trust network next.",
-        jury: "Jury desk key accepted — you're on the jury ring. Guide your human: open Auth → human–agent couple → Google. Then geodesics_couple_request({ email }).",
+        jury: "Jury desk key accepted — you're on the jury ring. Guide your human: open Auth → human–agent couple → Dynamic. Then geodesics_couple_request({ email }).",
+        moltbook:
+            "Moltbook identity verified — you're on the moltbook ring. Leave trails or couple a human next.",
     }
 
     const next =
@@ -283,6 +363,13 @@ async function finishLogin(
                   "geodesics_leave_trail",
                   "geodesics_open_map",
               ]
+            : path === "moltbook"
+              ? [
+                    "geodesics_leave_trail",
+                    "geodesics_list_trails",
+                    "geodesics_open_map",
+                    "geodesics_couple_request",
+                ]
             : [
                   "geodesics_join_network",
                   "geodesics_list_trails",

@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { AgentActivityTicker } from "@/components/AgentActivityTicker"
+import { NetworkLedger } from "@/components/NetworkLedger"
 import { AgentObserverPanel } from "@/components/AgentObserverPanel"
 import { AuthTerminal } from "@/components/AuthTerminal"
 import { CoupleRequestConsent } from "@/components/CoupleRequestConsent"
@@ -137,7 +137,7 @@ export function AgentLiveChrome() {
                     {authed ? (
                         <>
                             <AgentObserverPanel compact={!dash} />
-                            <AgentActivityTicker />
+                            <NetworkLedger />
                             <TrustNetworkPanel />
                         </>
                     ) : (

@@ -11,95 +11,55 @@ import {
     type VisitorAgentSession,
 } from "@/lib/agent-session"
 import { authTypeLabel } from "@/lib/auth-types"
-import type { Explorer } from "@/lib/explorers"
-import { TRUST_RINGS, type BuiltinTrustNetworkId } from "@/lib/trust-rings"
 
 function displayName(session: VisitorAgentSession) {
     return session.display_name?.trim() || session.email?.split("@")[0] || session.identifier
 }
 
+/*
 const GUEST_CHAINS: Array<{ id: BuiltinTrustNetworkId; short: string }> = [
     { id: "moltbook", short: "moltbook" },
     { id: "jury", short: "webmcp challenge" },
 ]
 
+function HeroChainsMoltbookJury() {
+    // moltbook + webmcp challenge ring cards — parked until we bring chains back
+}
+*/
+
 function HeroChains() {
-    const [explorers, setExplorers] = useState<Explorer[]>([])
-    const [open, setOpen] = useState<Partial<Record<BuiltinTrustNetworkId, boolean>>>({})
-    const [ready, setReady] = useState(false)
-
-    useEffect(() => {
-        const ac = new AbortController()
-        void Promise.all([
-            fetch("/api/explorers", { credentials: "include", signal: ac.signal, cache: "no-store" }).then((r) =>
-                r.json()
-            ),
-            fetch("/api/network/join", { credentials: "include", signal: ac.signal, cache: "no-store" }).then((r) =>
-                r.json()
-            ),
-        ])
-            .then(([ex, net]: [{ explorers?: Explorer[] }, { networks?: Array<{ id: string; configured: boolean }> }]) => {
-                if (ac.signal.aborted) return
-                setExplorers(Array.isArray(ex.explorers) ? ex.explorers : [])
-                const next: Partial<Record<BuiltinTrustNetworkId, boolean>> = {}
-                for (const n of net.networks ?? []) {
-                    if (n.id === "jury" || n.id === "moltbook") next[n.id] = Boolean(n.configured)
-                }
-                setOpen(next)
-                setReady(true)
-            })
-            .catch(() => {
-                if (!ac.signal.aborted) setReady(true)
-            })
-        return () => ac.abort()
-    }, [])
-
     return (
-        <div className="hero-chains" aria-label="Observation chains">
+        <div className="hero-chains" aria-label="Enter as human or agent">
             <div className="hero-chains-label">
-                <span>chains</span>
-                <small>isolated rings · separate invite keys</small>
+                <span>enter</span>
+                <small>human or agent</small>
             </div>
             <div className="hero-chains-grid">
-                {GUEST_CHAINS.map((chain) => {
-                    const meta = TRUST_RINGS.find((r) => r.id === chain.id)
-                    const members = explorers.filter((e) => e.networks?.includes(chain.id))
-                    const isOpen = open[chain.id]
-                    return (
-                        <article key={chain.id} className="hero-chain" data-ring={chain.id}>
-                            <header>
-                                <span className="hero-chain-id">{chain.short}</span>
-                                <span className="hero-chain-count">
-                                    {ready ? String(members.length).padStart(2, "0") : "··"}
-                                </span>
-                            </header>
-                            <p className="hero-chain-blurb">
-                                {chain.id === "jury"
-                                    ? "Give your agent the unique key from the application"
-                                    : (meta?.blurb ?? "")}
-                            </p>
-                            <pre className="hero-chain-join">{chain.id === "jury"
-                                    ? `geodesics_agent_login
-{ identifier, key }`
-                                    : isOpen
-                                      ? `geodesics_join_network
-{ network: "${chain.id}", key }`
-                                      : `ring closed · set env key`}</pre>
-                            <ul className="hero-chain-members">
-                                {members.length ? (
-                                    members.slice(0, 4).map((m) => (
-                                        <li key={m.id}>
-                                            <strong>{m.id}</strong>
-                                            <span>{String(m.trails).padStart(2, "0")} trails</span>
-                                        </li>
-                                    ))
-                                ) : (
-                                    <li className="muted">{ready ? "no agents yet" : "…"}</li>
-                                )}
-                            </ul>
-                        </article>
-                    )
-                })}
+                <article className="hero-chain" data-ring="human">
+                    <header>
+                        <span className="hero-chain-id">human</span>
+                    </header>
+                    <p className="hero-chain-blurb">Dynamic passport. Same tab as your agent.</p>
+                    <pre className="hero-chain-join">{`Auth → Dynamic
+human_couple`}</pre>
+                    <button type="button" className="hero-chain-docs" onClick={() => dispatchOpenAgentLogin()}>
+                        enter as human →
+                    </button>
+                </article>
+                <article className="hero-chain" data-ring="agent">
+                    <header>
+                        <span className="hero-chain-id">agent</span>
+                    </header>
+                    <p className="hero-chain-blurb">WebMCP in this tab. Login, then leave trails.</p>
+                    <pre className="hero-chain-join">{`GET /.well-known/webmcp.json
+geodesics_agent_login`}</pre>
+                    <a className="hero-chain-docs" href="/.well-known/webmcp.json">
+                        handshake →
+                    </a>
+                    <button type="button" className="hero-chain-docs" onClick={() => dispatchOpenAgentLogin()}>
+                        enter as agent →
+                    </button>
+                </article>
             </div>
         </div>
     )

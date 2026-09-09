@@ -1,9 +1,9 @@
 import { redactEmails } from "@/lib/agent-activity"
 import { assertPublicOrigin, formatTrailAge, isLoopbackOrigin, type Trail, type TrailStatus } from "@/lib/trails"
-import { hasDatabase, sql } from "@/lib/db"
+import { ensureSchema, hasDatabase, sql } from "@/lib/db"
 
 const TRAIL_CACHE_MS = 20_000
-const TRAIL_GEN = 3
+const TRAIL_GEN = 4
 const QUERY_MS = 6000
 
 const cacheG = globalThis as typeof globalThis & {
@@ -32,28 +32,23 @@ function withAge(trail: Trail): Trail {
     return { ...trail, age: formatTrailAge(trail.discovered_at) }
 }
 
-function rowToTrail(row: {
-    id: string
-    agent: string
-    origin: string
-    route: string
-    status: string
-    goal: string | null
-    discovered_at: Date | string
-}): Trail {
+function rowToTrail(row: Record<string, unknown>): Trail {
+    const discoveredRaw = row.discovered_at
     const discovered =
-        row.discovered_at instanceof Date
-            ? row.discovered_at.toISOString()
-            : new Date(row.discovered_at).toISOString()
+        discoveredRaw instanceof Date
+            ? discoveredRaw.toISOString()
+            : new Date(String(discoveredRaw)).toISOString()
+    const network = typeof row.network === "string" ? row.network.trim() || undefined : undefined
     return withAge({
-        id: row.id,
-        agent: row.agent,
-        origin: redactEmails(row.origin),
-        route: redactEmails(row.route),
-        status: (row.status as TrailStatus) || "observed",
-        goal: row.goal ? redactEmails(row.goal) : undefined,
+        id: String(row.id),
+        agent: String(row.agent),
+        origin: redactEmails(String(row.origin ?? "")),
+        route: redactEmails(String(row.route ?? "")),
+        status: (String(row.status) as TrailStatus) || "observed",
+        goal: row.goal ? redactEmails(String(row.goal)) : undefined,
         discovered_at: discovered,
         age: "",
+        network,
     })
 }
 
@@ -77,6 +72,7 @@ export function invalidateTrailListCache() {
 
 export async function listTrails(): Promise<Trail[]> {
     if (!hasDatabase()) return []
+    await ensureSchema()
     if (cacheG.__geodesicsTrailGen !== TRAIL_GEN) {
         cacheG.__geodesicsTrailGen = TRAIL_GEN
         cacheG.__geodesicsTrailInflight = undefined
@@ -94,7 +90,7 @@ export async function listTrails(): Promise<Trail[]> {
         const rows = await raceTimeout(
             Promise.resolve(
                 sql()`
-                    SELECT id, agent, origin, route, status, goal, discovered_at
+                    SELECT id, agent, origin, route, status, goal, discovered_at, network
                     FROM trails
                     ORDER BY discovered_at DESC
                     LIMIT 120
@@ -119,8 +115,9 @@ export async function listTrails(): Promise<Trail[]> {
 
 export async function getTrail(id: string): Promise<Trail | null> {
     if (!hasDatabase()) return null
+    await ensureSchema()
     const rows = await sql()`
-        SELECT id, agent, origin, route, status, goal, discovered_at
+        SELECT id, agent, origin, route, status, goal, discovered_at, network
         FROM trails
         WHERE id = ${id}
         LIMIT 1
@@ -136,6 +133,7 @@ export async function leaveTrail(input: {
     goal?: string
     status?: TrailStatus
     next?: string[]
+    network?: string
 }): Promise<Trail> {
     const origin = input.origin.trim()
     const route = input.route.trim()
@@ -145,13 +143,15 @@ export async function leaveTrail(input: {
     if (!hasDatabase()) {
         throw Object.assign(new Error("POSTGRES_URL is not set — trails cannot persist"), { status: 503 })
     }
+    await ensureSchema()
 
     const db = sql()
     const [{ max }] = await db`SELECT COALESCE(MAX(NULLIF(id, '')::int), 0) AS max FROM trails`
     const id = String(Number(max) + 1).padStart(3, "0")
     const discoveredAt = new Date().toISOString()
+    const network = input.network?.trim().toLowerCase() || null
     const rows = await db`
-        INSERT INTO trails (id, agent, origin, route, status, goal, discovered_at)
+        INSERT INTO trails (id, agent, origin, route, status, goal, discovered_at, network)
         VALUES (
             ${id},
             ${input.agent},
@@ -159,9 +159,10 @@ export async function leaveTrail(input: {
             ${redactEmails(route)},
             ${"observed"},
             ${redactEmails(input.goal?.trim() || "Leave a path for the next agent")},
-            ${discoveredAt}
+            ${discoveredAt},
+            ${network}
         )
-        RETURNING id, agent, origin, route, status, goal, discovered_at
+        RETURNING id, agent, origin, route, status, goal, discovered_at, network
     `
     invalidateTrailListCache()
     return rowToTrail(rows[0])

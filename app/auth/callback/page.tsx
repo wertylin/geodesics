@@ -13,28 +13,38 @@ export default function AuthCallbackPage() {
     const [error, setError] = useState<string | null>(null)
 
     useEffect(() => {
-        let cancelled = false
+        let alive = true
+
         void (async () => {
-            try {
-                const res = await fetch("/api/auth/me", { credentials: "include" })
-                const data = (await res.json().catch(() => ({}))) as Record<string, unknown>
-                if (cancelled) return
-                if (!res.ok || !data.session) {
-                    setError("Session missing after Google sign-in.")
-                    return
+            for (let attempt = 0; attempt < 6; attempt++) {
+                try {
+                    const res = await fetch("/api/auth/me", {
+                        credentials: "include",
+                        cache: "no-store",
+                        signal: AbortSignal.timeout(4000),
+                    })
+                    const data = (await res.json().catch(() => ({}))) as Record<string, unknown>
+                    if (!alive) return
+                    if (res.ok && data.session) {
+                        const session = visitorSessionFromLoginPayload(
+                            data.session as Record<string, unknown>
+                        )
+                        if (session) {
+                            completeAgentLogin(session)
+                            router.replace("/")
+                            return
+                        }
+                    }
+                } catch {
+                    /* retry */
                 }
-                const session = visitorSessionFromLoginPayload(data.session as Record<string, unknown>)
-                if (!session) {
-                    setError("Invalid session payload.")
-                    return
-                }
-                completeAgentLogin(session)
-            } catch (e) {
-                if (!cancelled) setError(e instanceof Error ? e.message : "Auth callback failed")
+                await new Promise((r) => setTimeout(r, 250 * (attempt + 1)))
             }
+            if (alive) setError("Session missing after Google sign-in. Retry Google login.")
         })()
+
         return () => {
-            cancelled = true
+            alive = false
         }
     }, [router])
 
@@ -45,6 +55,8 @@ export default function AuthCallbackPage() {
             <p className="muted">{error ?? "Hydrating human–agent couple session."}</p>
             {error ? (
                 <p className="agent-door">
+                    <a href="/api/auth/google">Retry Google →</a>
+                    {" · "}
                     <a href="/">← Surface</a>
                 </p>
             ) : null}

@@ -10,6 +10,8 @@ import {
     visitorSessionFromLoginPayload,
     type VisitorAgentSession,
 } from "@/lib/agent-session"
+import { DynamicHumanAuth } from "@/components/DynamicHumanAuth"
+import { useDynamicPassportReady } from "@/components/DynamicRoot"
 import { authTypeLabel } from "@/lib/auth-types"
 import { isWebMcpBrowserApiAvailable } from "@/lib/webmcp-page-agent"
 
@@ -27,6 +29,8 @@ export function AgentLogin({ onBack, embedded = false }: AgentLoginProps) {
     const [busy, setBusy] = useState(false)
     const [webMcpReady, setWebMcpReady] = useState(false)
     const [googleOk, setGoogleOk] = useState(false)
+    const [dynamicOk, setDynamicOk] = useState(false)
+    const passportReady = useDynamicPassportReady()
     const [agentLog, setAgentLog] = useState("Pick how you enter GEODESICS.")
     const [lastToolPayload, setLastToolPayload] = useState("")
     const [issuedLine, setIssuedLine] = useState("Loading issued principals…")
@@ -45,9 +49,10 @@ export function AgentLogin({ onBack, embedded = false }: AgentLoginProps) {
         let cancelled = false
         void fetch("/api/auth/me", { credentials: "include", cache: "no-store" })
             .then((r) => r.json())
-            .then((d: { google_configured?: boolean; session?: Record<string, unknown> | null }) => {
+            .then((d: { google_configured?: boolean; dynamic_configured?: boolean; session?: Record<string, unknown> | null }) => {
                 if (cancelled) return
                 setGoogleOk(Boolean(d.google_configured))
+                setDynamicOk(Boolean(d.dynamic_configured))
                 if (!d.session) {
                     if (readVisitorAgentSession()) clearVisitorAgentSession()
                     setSession(null)
@@ -62,7 +67,10 @@ export function AgentLogin({ onBack, embedded = false }: AgentLoginProps) {
                 }
             })
             .catch(() => {
-                if (!cancelled) setGoogleOk(false)
+                if (!cancelled) {
+                    setGoogleOk(false)
+                    setDynamicOk(false)
+                }
             })
         return () => {
             cancelled = true
@@ -182,8 +190,8 @@ export function AgentLogin({ onBack, embedded = false }: AgentLoginProps) {
                 <div className="auth-gate">
                     <button type="button" className="auth-gate-card" onClick={() => setGate("couple")}>
                         <span>Human–agent couple</span>
-                        <strong>Google sign-in</strong>
-                        <small>You + your agent on the same map. Human side first.</small>
+                        <strong>Dynamic passport</strong>
+                        <small>Email OTP → embedded wallet. Human owns spend rights. Agent waits for the couple.</small>
                     </button>
                     <button type="button" className="auth-gate-card" onClick={() => setGate("external")}>
                         <span>External agent</span>
@@ -194,19 +202,21 @@ export function AgentLogin({ onBack, embedded = false }: AgentLoginProps) {
             ) : gate === "couple" ? (
                 <div className="auth-couple">
                     <p>
-                        Sign in with Google to start a human–agent couple session. Linking an issued agent
-                        comes next — for now you land as the human half.
+                        Human half of the couple is a Dynamic passport (email OTP + embedded wallet).
+                        Google is a fallback. Linking an issued agent still happens after this.
                     </p>
+                    {dynamicOk && passportReady ? <DynamicHumanAuth onStatus={setAgentLog} /> : null}
+                    {dynamicOk && !passportReady ? <p className="issued-line">booting Dynamic passport…</p> : null}
+                    {!dynamicOk ? (
+                        <p className="issued-line">
+                            Dynamic not configured. Set <code>NEXT_PUBLIC_DYNAMIC_ENVIRONMENT_ID</code>.
+                        </p>
+                    ) : null}
                     {googleOk ? (
                         <a className="lime-button google-auth-btn" href="/api/auth/google">
-                            Continue with Google <span>→</span>
+                            Fallback: Google <span>→</span>
                         </a>
-                    ) : (
-                        <p className="issued-line">
-                            Google not configured. Set <code>GOOGLE_CLIENT_ID</code> +{" "}
-                            <code>GOOGLE_CLIENT_SECRET</code> in <code>.env.local</code>.
-                        </p>
-                    )}
+                    ) : null}
                     <button type="button" className="text-button" onClick={() => setGate("choose")}>
                         ← Back
                     </button>

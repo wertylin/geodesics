@@ -9,6 +9,8 @@ export type Trail = {
     age: string
     goal?: string
     discovered_at?: string
+    /** Trust network this trail was left on (`jury`, `moltbook`, `hn_…`). */
+    network?: string
 }
 
 const LOOPBACK_HOST =

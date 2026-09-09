@@ -63,7 +63,7 @@ function bondedPeer(session: VisitorAgentSession | null): string | null {
     return null
 }
 
-function CoupleChat({ session }: { session: VisitorAgentSession }) {
+export function CoupleChat({ session }: { session: VisitorAgentSession }) {
     const peer =
         session.auth_type === "human_couple"
             ? session.linked_agent!

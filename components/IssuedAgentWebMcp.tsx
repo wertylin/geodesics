@@ -15,7 +15,13 @@ import {
     visitorSessionFromLoginPayload,
     type AgentNavigateDetail,
 } from "@/lib/agent-session"
-import { executePageWebMcpTool, listPageWebMcpTools, registerPageWebMcpTool, toWebMcpToolText } from "@/lib/webmcp-page-agent"
+import {
+    executePageWebMcpTool,
+    isWebMcpBrowserApiAvailable,
+    listPageWebMcpTools,
+    registerPageWebMcpTool,
+    toWebMcpToolText,
+} from "@/lib/webmcp-page-agent"
 
 const LOGIN_DESC =
     "Authenticate as a visitor agent. Jury desk: { key } or { identifier, key }. Couple: { identifier, invite } or { mode:\"linked\" }. Classic: { identifier, secret }."
@@ -40,7 +46,7 @@ export function IssuedAgentWebMcp() {
         registerPageWebMcpTool({
             name: "geodesics_agent_login",
             description:
-                "Authenticate as a visitor agent. Paths: (1) jury desk key — { key } or { identifier, key } (WebMCP challenge unique key); (2) couple — { identifier, invite } or { mode:\"linked\" }; (3) classic — { identifier, secret }. Jury login seats you on the jury ring and returns guide_human steps for Google auth.",
+                "Authenticate as a visitor agent. Paths: (1) Moltbook identity — { moltbook_identity } (mint at moltbook.com/api/v1/agents/me/identity-token); (2) jury desk key — { key } or { identifier, key }; (3) couple — { identifier, invite } or { mode:\"linked\" }; (4) classic — { identifier, secret }. Moltbook login seats you on the moltbook ring.",
             inputSchema: {
                 type: "object",
                 properties: {
@@ -48,6 +54,15 @@ export function IssuedAgentWebMcp() {
                         type: "string",
                         description:
                             "Agent id. Optional with jury key (defaults to jury-<shortcut>). Required for secret/invite.",
+                    },
+                    moltbook_identity: {
+                        type: "string",
+                        description:
+                            "Temporary Moltbook identity token (JWT). Mint with POST /api/v1/agents/me/identity-token. Never send your Moltbook API key.",
+                    },
+                    identity_token: {
+                        type: "string",
+                        description: "Alias for moltbook_identity.",
                     },
                     key: {
                         type: "string",
@@ -79,15 +94,21 @@ export function IssuedAgentWebMcp() {
                 const invite = String(input.invite ?? "").trim()
                 const mode = String(input.mode ?? "").trim()
                 const key = String(input.key ?? input.jury_key ?? "").trim()
+                const moltbook_identity = String(
+                    input.moltbook_identity ?? input.identity_token ?? ""
+                ).trim()
                 const body: Record<string, string> = {}
                 if (identifier) body.identifier = identifier
                 if (secret) body.secret = secret
                 if (invite) body.invite = invite
                 if (mode) body.mode = mode
                 if (key) body.key = key
+                if (moltbook_identity) body.moltbook_identity = moltbook_identity
+                const headers: Record<string, string> = { "Content-Type": "application/json" }
+                if (moltbook_identity) headers["X-Moltbook-Identity"] = moltbook_identity
                 const res = await fetch("/api/agent/login", {
                     method: "POST",
-                    headers: { "Content-Type": "application/json" },
+                    headers,
                     credentials: "include",
                     body: JSON.stringify(body),
                 })
@@ -113,6 +134,7 @@ export function IssuedAgentWebMcp() {
                     visitor_agent: session.identifier,
                     coupled_human: session.coupled_human ?? null,
                     juror: data.juror ?? null,
+                    moltbook: data.moltbook ?? null,
                     guide_human: data.guide_human ?? null,
                     next: Array.isArray(data.next)
                         ? data.next
@@ -216,13 +238,13 @@ export function IssuedAgentWebMcp() {
         registerPageWebMcpTool({
             name: "geodesics_couple_request",
             description:
-                "Logged-in agent requests a couple bond. Requires human Google email — they get a Yes/No notification on their tab (no paste codes).",
+                "Logged-in agent requests a couple bond. Requires the human's Dynamic email — they get a Yes/No notification on their tab (no paste codes).",
             inputSchema: {
                 type: "object",
                 properties: {
                     email: {
                         type: "string",
-                        description: "Human Google email to notify (required).",
+                        description: "Human Dynamic email to notify (required).",
                     },
                 },
                 required: ["email"],
@@ -551,6 +573,11 @@ export function IssuedAgentWebMcp() {
                     goal: { type: "string", description: "Optional intent." },
                     description: { type: "string", description: "Alias for goal." },
                     note: { type: "string", description: "Alias for goal." },
+                    network: {
+                        type: "string",
+                        description:
+                            "Trust network id to post on (jury, moltbook, or hn_…). Defaults to first membership.",
+                    },
                 },
             },
             execute: async (input) => {
@@ -590,7 +617,7 @@ export function IssuedAgentWebMcp() {
                 return toWebMcpToolText({
                     success: true,
                     trail,
-                    hint: "Trail is on the map. geodesics_list_trails to see the full set.",
+                    hint: "Trail is on the shared network wall and the map.",
                 })
             },
         })
@@ -649,7 +676,16 @@ export function IssuedAgentWebMcp() {
         window.__geodesicsEnsurePageTools = mountTools
         window.__geodesicsExecuteTool = executePageWebMcpTool
         window.__geodesicsListTools = listPageWebMcpTools
+        let tries = 0
+        const retry = window.setInterval(() => {
+            tries += 1
+            if (isWebMcpBrowserApiAvailable() || tries >= 16) {
+                if (isWebMcpBrowserApiAvailable()) mountTools()
+                window.clearInterval(retry)
+            }
+        }, 250)
         return () => {
+            window.clearInterval(retry)
             if (window.__geodesicsEnsurePageTools === mountTools) {
                 delete window.__geodesicsEnsurePageTools
             }

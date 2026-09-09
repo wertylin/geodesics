@@ -3,6 +3,7 @@ import { authSecret } from "@/lib/secrets"
 import { ensureSchema, hasDatabase, sql } from "@/lib/db"
 import type { VisitorAgentSession } from "@/lib/agent-session"
 import { normalizeAuthType } from "@/lib/auth-types"
+import { dynamicHumanKey } from "@/lib/dynamic-config"
 import { syncLinkedAgentOntoHumanNetworks } from "@/lib/trust-network"
 
 export type HumanRow = {
@@ -26,6 +27,10 @@ function googleClientSecret() {
 
 export function googleAuthConfigured(): boolean {
     return Boolean(googleClientId() && googleClientSecret() && authSecret())
+}
+
+export function humanPassport(human: HumanRow): "dynamic" | "google" {
+    return human.google_sub.startsWith("dyn:") ? "dynamic" : "google"
 }
 
 export function googleRedirectUri(origin: string): string {
@@ -171,6 +176,43 @@ export async function upsertHumanFromGoogle(profile: GoogleProfile): Promise<Hum
     return mapHumanRow(row)
 }
 
+export async function upsertHumanFromDynamic(profile: {
+    user_id: string
+    email: string
+    display_name: string | null
+}): Promise<HumanRow> {
+    const sub = dynamicHumanKey(profile.user_id)
+    if (!hasDatabase()) {
+        const now = new Date().toISOString()
+        return {
+            google_sub: sub,
+            email: profile.email,
+            display_name: profile.display_name,
+            picture: null,
+            linked_agent: null,
+            couple_key_hash: null,
+            created_at: now,
+            last_login: now,
+        }
+    }
+    await ensureSchema()
+    const rows = await sql()`
+        INSERT INTO humans (google_sub, email, display_name, last_login)
+        VALUES (
+            ${sub},
+            ${profile.email},
+            ${profile.display_name},
+            NOW()
+        )
+        ON CONFLICT (google_sub) DO UPDATE SET
+            email = EXCLUDED.email,
+            display_name = COALESCE(EXCLUDED.display_name, humans.display_name),
+            last_login = NOW()
+        RETURNING google_sub, email, display_name, picture, linked_agent, couple_key_hash, created_at, last_login
+    `
+    return mapHumanRow(rows[0])
+}
+
 function mapHumanRow(row: Record<string, unknown>): HumanRow {
     return {
         google_sub: String(row.google_sub),
@@ -191,11 +233,12 @@ function mapHumanRow(row: Record<string, unknown>): HumanRow {
 }
 
 export function sessionFromHuman(human: HumanRow): VisitorAgentSession {
+    const passport = humanPassport(human)
     return {
         identifier: humanPrincipalId(human.google_sub),
         display_name: human.display_name,
         email: human.email,
-        initiated_by: "google",
+        initiated_by: passport,
         auth_type: "human_couple",
         google_sub: human.google_sub,
         linked_agent: human.linked_agent,
