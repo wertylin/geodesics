@@ -5,7 +5,6 @@ import Link from "next/link"
 import { useEffect, useRef, useState } from "react"
 import { EssayField } from "@/components/EssayField"
 import { CoupleChat } from "@/components/AgentActivityTicker"
-import { SnakeWebMcp } from "@/components/SnakeWebMcp"
 import { ThemeToggle } from "@/components/ThemeToggle"
 import { LiveGlobe } from "@/components/LiveNetwork"
 import {
@@ -15,10 +14,18 @@ import {
     readVisitorAgentSession,
     type VisitorAgentSession,
 } from "@/lib/agent-session"
+import { SnakeLeaderboard } from "@/components/SnakeLeaderboard"
+import { SnakeScoreCard } from "@/components/SnakeScoreCard"
 import { authTypeLabel } from "@/lib/auth-types"
+import { SNAKE_DEATH_CLEAR_EVENT, SNAKE_DEATH_EVENT } from "@/lib/snake-runtime"
 
 function displayName(session: VisitorAgentSession) {
     return session.display_name?.trim() || session.email?.split("@")[0] || session.identifier
+}
+
+function snakePlayerName(session: VisitorAgentSession | null) {
+    if (!session) return "anon"
+    return displayName(session)
 }
 
 function LandingEnter() {
@@ -29,7 +36,7 @@ function LandingEnter() {
                 className="hero-gate"
                 data-kind="human"
                 aria-label="Enter as human"
-                onClick={() => dispatchOpenAgentLogin()}
+                onClick={() => dispatchOpenAgentLogin({ intent: "human" })}
             >
                 <span className="hero-gate-name">human</span>
             </button>
@@ -39,7 +46,7 @@ function LandingEnter() {
                     className="hero-gate"
                     data-kind="agent"
                     aria-label="Enter as agent"
-                    onClick={() => dispatchOpenAgentLogin()}
+                    onClick={() => dispatchOpenAgentLogin({ intent: "agent" })}
                 >
                     <span className="hero-gate-name">agent</span>
                 </button>
@@ -54,11 +61,76 @@ function LandingEnter() {
     )
 }
 
+function CoupleWait({ session }: { session: VisitorAgentSession }) {
+    const [invite, setInvite] = useState<string | null>(null)
+    const [expiresIn, setExpiresIn] = useState<number | null>(null)
+    const [busy, setBusy] = useState(false)
+    const [err, setErr] = useState<string | null>(null)
+
+    const mint = async () => {
+        setBusy(true)
+        setErr(null)
+        try {
+            const res = await fetch("/api/auth/couple", {
+                method: "POST",
+                credentials: "include",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action: "invite" }),
+            })
+            const data = (await res.json().catch(() => ({}))) as {
+                error?: string
+                invite?: string
+                expires_in_sec?: number
+            }
+            if (!res.ok) throw new Error(data.error || "invite failed")
+            setInvite(data.invite ?? null)
+            setExpiresIn(typeof data.expires_in_sec === "number" ? data.expires_in_sec : null)
+        } catch (e) {
+            setErr(e instanceof Error ? e.message : "invite failed")
+        } finally {
+            setBusy(false)
+        }
+    }
+
+    return (
+        <div className="landing-couple-wait">
+            <p className="landing-tag">
+                passport ok · {displayName(session)}
+                <br />
+                waiting for your agent on this tab
+            </p>
+            {invite ? (
+                <pre className="landing-invite">{`invite (${expiresIn ?? "?"}s)
+${invite}
+
+geodesics_agent_login({
+  identifier: "…",
+  invite: "…"
+})`}</pre>
+            ) : (
+                <button type="button" className="hero-gate" data-kind="human" disabled={busy} onClick={() => void mint()}>
+                    <span className="hero-gate-name">{busy ? "…" : "mint invite"}</span>
+                </button>
+            )}
+            {err ? <p className="landing-start">{err}</p> : null}
+            <p className="landing-start">
+                <button type="button" className="text-button" onClick={() => dispatchOpenAgentLogin({ intent: "human" })}>
+                    open live ↑
+                </button>
+                {" · "}
+                agent: mode &quot;linked&quot; after bond
+            </p>
+        </div>
+    )
+}
+
 export function LandingExplore() {
     const [brief, setBrief] = useState(false)
     const [session, setSession] = useState<VisitorAgentSession | null>(null)
     const [memberships, setMemberships] = useState<string[]>([])
     const [ready, setReady] = useState(false)
+    const [death, setDeath] = useState<{ score: number } | null>(null)
+    const [highlightRank, setHighlightRank] = useState<number | null>(null)
     const stageRef = useRef<HTMLDivElement | null>(null)
     const railRef = useRef<HTMLElement | null>(null)
     const voidRefs = useRef([stageRef, railRef]).current
@@ -108,8 +180,29 @@ export function LandingExplore() {
     }, [brief])
 
     useEffect(() => {
+        const onDeath = (e: Event) => {
+            const score = (e as CustomEvent<{ score: number }>).detail?.score ?? 0
+            setDeath({ score })
+            setHighlightRank(null)
+        }
+        const onClear = () => {
+            setDeath(null)
+            setHighlightRank(null)
+        }
+        window.addEventListener(SNAKE_DEATH_EVENT, onDeath)
+        window.addEventListener(SNAKE_DEATH_CLEAR_EVENT, onClear)
+        return () => {
+            window.removeEventListener(SNAKE_DEATH_EVENT, onDeath)
+            window.removeEventListener(SNAKE_DEATH_CLEAR_EVENT, onClear)
+        }
+    }, [])
+
+    useEffect(() => {
         if (!ready) return
-        if (session && !bonded) {
+        // Stay on landing stage for guests + bonded + unbonded humans waiting to couple.
+        // Only unbonded external agents use the dash exile.
+        const agentUnbonded = Boolean(session?.auth_type === "external_agent" && !bonded)
+        if (agentUnbonded) {
             delete document.body.dataset.landing
             return
         }
@@ -123,62 +216,39 @@ export function LandingExplore() {
         return <div className="landing-stage" aria-hidden />
     }
 
-    if (session && !bonded) {
-        const isAgent = session.auth_type === "external_agent"
-        const name = displayName(session)
-        const bond = isAgent
-            ? session.coupled_human
-                ? `${session.identifier} ↔ ${session.coupled_human}`
-                : `${session.identifier} · unlinked`
-            : session.linked_agent
-              ? `you ↔ ${session.linked_agent}`
-              : "you · agent unlinked"
+    // Unbonded agent only — human unbonded stays on landing (couple wait).
+    if (session && !bonded && session.auth_type === "external_agent") {
+        const bond = session.coupled_human
+            ? `${session.identifier} ↔ ${session.coupled_human}`
+            : `${session.identifier} · unlinked`
         const rings = memberships.length ? memberships.join(" · ") : "none yet"
-        const nextTools = isAgent
-            ? memberships.length
-                ? ["geodesics_leave_trail", "geodesics_list_trails", "geodesics_open_map"]
-                : session.coupled_human
-                  ? ["geodesics_join_network", "geodesics_leave_trail"]
-                  : ["geodesics_couple_request", "geodesics_join_network"]
-            : session.linked_agent
-              ? memberships.length
-                  ? ["open live panel", "leave trails via agent"]
-                  : ["start human trust network"]
-              : ["await agent Yes/No", "mint invite"]
+        const nextTools = memberships.length
+            ? ["geodesics_leave_trail", "geodesics_list_trails", "geodesics_open_map"]
+            : session.coupled_human
+              ? ["geodesics_join_network", "geodesics_leave_trail"]
+              : ["geodesics_couple_request", "geodesics_join_network"]
 
         return (
-            <section className="hero hero-dash" data-role={isAgent ? "agent" : "human"}>
+            <section className="hero hero-dash" data-role="agent">
                 <div className="dash-copy">
-                    <div className="eyebrow">{isAgent ? "AGENT · LIVE" : "HUMAN · LIVE"}</div>
+                    <div className="eyebrow">AGENT · LIVE</div>
                     <h1 className="dash-welcome">
-                        {isAgent ? (
-                            <>
-                                Agent <em>{session.identifier}</em>
-                            </>
-                        ) : (
-                            <>
-                                Welcome, <em>{name}</em>
-                            </>
-                        )}
+                        Agent <em>{session.identifier}</em>
                     </h1>
                     <p className="dash-sub">
                         {authTypeLabel(session.auth_type)}
-                        {isAgent
-                            ? " · trust network + trails via the live panel"
-                            : " · shared tab with your agent"}
+                        {" · trust network + trails via the live panel"}
                     </p>
                     <dl className="dash-meta">
                         <div>
                             <dt>bond</dt>
-                            <dd data-on={Boolean(session.coupled_human || session.linked_agent) ? "true" : "false"}>
-                                {bond}
-                            </dd>
+                            <dd data-on={Boolean(session.coupled_human) ? "true" : "false"}>{bond}</dd>
                         </div>
                         <div>
                             <dt>networks</dt>
                             <dd>{rings}</dd>
                         </div>
-                        {isAgent && session.initiated_by ? (
+                        {session.initiated_by ? (
                             <div>
                                 <dt>via</dt>
                                 <dd>{session.initiated_by}</dd>
@@ -196,7 +266,11 @@ export function LandingExplore() {
                         </ul>
                     </div>
                     <div className="dash-actions">
-                        <button type="button" className="dash-open-live" onClick={() => dispatchOpenAgentLogin()}>
+                        <button
+                            type="button"
+                            className="dash-open-live"
+                            onClick={() => dispatchOpenAgentLogin({ intent: "agent" })}
+                        >
                             Open dashboard <span>↑</span>
                         </button>
                         <Link href="/map" className="dash-map-link">
@@ -205,11 +279,7 @@ export function LandingExplore() {
                         <Link href="/registry" className="dash-map-link">
                             Registry →
                         </Link>
-                        <button
-                            type="button"
-                            className="dash-map-link"
-                            onClick={() => void logoutVisitor()}
-                        >
+                        <button type="button" className="dash-map-link" onClick={() => void logoutVisitor()}>
                             Sign out →
                         </button>
                     </div>
@@ -221,11 +291,22 @@ export function LandingExplore() {
         )
     }
 
+    const humanWaiting = Boolean(session?.auth_type === "human_couple" && !session.linked_agent)
+
     return (
-        <div className="landing-stage" data-rail={bonded ? "true" : "false"}>
-            <SnakeWebMcp />
+        <div className="landing-stage" data-rail={bonded ? "true" : "false"} data-dead={death ? "true" : "false"}>
             <EssayField voidRefs={voidRefs} playable className="essay-field essay-field-full" />
             <div className="landing-frost" aria-hidden />
+
+            <SnakeLeaderboard highlightRank={highlightRank} />
+
+            {death ? (
+                <SnakeScoreCard
+                    score={death.score}
+                    name={snakePlayerName(session)}
+                    onResult={(result) => setHighlightRank(result && result.rank <= 10 ? result.rank : null)}
+                />
+            ) : null}
 
             <div className="landing-void" ref={stageRef}>
                 <div className="landing-mark">
@@ -243,21 +324,33 @@ export function LandingExplore() {
                         />
                     </span>
                 </div>
-                <p className="landing-tag">the snake carves a void. the text reflows. every frame. no DOM.</p>
-                {bonded && session ? (
-                    <p className="landing-bond">
-                        {session.auth_type === "human_couple"
-                            ? `coupled · ${session.linked_agent}`
-                            : `agent · ${session.identifier}`}
-                        {" · "}
-                        <button type="button" className="text-button" onClick={() => dispatchOpenAgentLogin()}>
-                            live ↑
-                        </button>
-                    </p>
+                {humanWaiting && session ? (
+                    <CoupleWait session={session} />
+                ) : bonded && session ? (
+                    <>
+                        <p className="landing-tag">
+                            same tab. human couples an agent. WebMCP exposes the page. the snake is how you prove it.
+                        </p>
+                        <p className="landing-bond">
+                            {session.auth_type === "human_couple"
+                                ? `coupled · ${session.linked_agent}`
+                                : `agent · ${session.identifier}`}
+                            {" · "}
+                            <button type="button" className="text-button" onClick={() => dispatchOpenAgentLogin()}>
+                                live ↑
+                            </button>
+                        </p>
+                        <p className="landing-start">[ space ] start · arrows / wasd</p>
+                    </>
                 ) : (
-                    <LandingEnter />
+                    <>
+                        <p className="landing-tag">
+                            same tab. human couples an agent. WebMCP exposes the page. the snake is how you prove it.
+                        </p>
+                        <LandingEnter />
+                        <p className="landing-start">[ space ] start · arrows / wasd</p>
+                    </>
                 )}
-                <p className="landing-start">[ space ] start · arrows / wasd</p>
             </div>
 
             {bonded && session ? (

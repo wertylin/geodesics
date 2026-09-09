@@ -16,7 +16,9 @@ import {
 } from "@/lib/essay-layout"
 import { fillEssay } from "@/lib/landing-essay"
 import {
+    clearSnakeDeath,
     consumeSnakeTurn,
+    notifySnakeDeath,
     publishSnakeSnapshot,
     type SnakeDir,
 } from "@/lib/snake-runtime"
@@ -145,6 +147,7 @@ export function EssayField({ voidRefs, extraVoids, playable = true, className }:
         let raf = 0
         let alive = true
         let lastTs = performance.now()
+        let deathNotified = false
 
         const ensurePrepared = () => {
             const font = canvasFont()
@@ -332,6 +335,11 @@ export function EssayField({ voidRefs, extraVoids, playable = true, className }:
 
             const live = snakeRef.current
             const { cols, rows } = gridRef.current
+            if (live?.dead && !deathNotified) {
+                deathNotified = true
+                notifySnakeDeath(live.score)
+            }
+            if (live && !live.dead) deathNotified = false
             publishSnakeSnapshot({
                 playing: Boolean(live?.playing),
                 paused: Boolean(live?.paused),
@@ -380,6 +388,8 @@ export function EssayField({ voidRefs, extraVoids, playable = true, className }:
                 if (!s.playing || s.dead) {
                     const { cols, rows } = gridRef.current
                     snakeRef.current = { ...freshSnake(cols, rows), playing: true }
+                    deathNotified = false
+                    clearSnakeDeath()
                 } else {
                     s.paused = !s.paused
                 }
@@ -415,6 +425,8 @@ export function EssayField({ voidRefs, extraVoids, playable = true, className }:
         const onStart = () => {
             const { cols, rows } = gridRef.current
             snakeRef.current = { ...freshSnake(cols, rows), playing: true }
+            deathNotified = false
+            clearSnakeDeath()
             kick()
         }
 
