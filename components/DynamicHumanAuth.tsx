@@ -42,7 +42,7 @@ export function DynamicHumanAuth({ onStatus }: { onStatus?: (line: string) => vo
                 </label>
                 <div className="auth-terminal-cmds">
                     <button type="submit" className="auth-terminal-run" disabled={sending}>
-                        {sending ? "…" : "send Dynamic OTP →"}
+                        {sending ? "…" : "send code →"}
                     </button>
                 </div>
             </form>
@@ -64,7 +64,7 @@ export function DynamicHumanAuth({ onStatus }: { onStatus?: (line: string) => vo
                     { otpVerification, verificationToken: token },
                     {
                         onError: (err) => onStatus?.(`err · ${err.message}`),
-                        onSuccess: () => onStatus?.("ok · Dynamic passport · minting couple cookie"),
+                        onSuccess: () => onStatus?.("ok · passport · couple cookie"),
                     }
                 )
             }}

@@ -77,6 +77,16 @@ function getRegistry(): Map<string, WebMcpPageToolDef> {
     return window.__geodesicsWebMcpPageRegistry
 }
 
+const ensureMounts = new Set<() => void>()
+
+/** Extra remount hooks (snake tools, etc.) — called on list/execute alongside `__geodesicsEnsurePageTools`. */
+export function onEnsurePageTools(mount: () => void): () => void {
+    ensureMounts.add(mount)
+    return () => {
+        ensureMounts.delete(mount)
+    }
+}
+
 export function getWebMcpModelContext(): ModelContextAPI | null {
     if (typeof window === "undefined") return null
     return document.modelContext ?? navigator.modelContext ?? null
@@ -202,6 +212,13 @@ export function registerPageWebMcpTool(tool: WebMcpPageToolDef, opts?: { mirrorT
 
 function ensurePageToolsMounted(): void {
     if (typeof window === "undefined") return
+    for (const mount of ensureMounts) {
+        try {
+            mount()
+        } catch {
+            /* registration may throw during partial HMR */
+        }
+    }
     try {
         window.__geodesicsEnsurePageTools?.()
     } catch {

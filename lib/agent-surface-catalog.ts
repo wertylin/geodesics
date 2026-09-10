@@ -116,8 +116,9 @@ export const AGENT_HTTP_ENDPOINTS: AgentHttpEndpoint[] = [
 
 export const OPENCLAW_WEBMCP_RULE = [
     "GET /.well-known/webmcp.json then open this origin in a tab.",
-    "Login: executeTool('geodesics_agent_login', { moltbook_identity } | { key } | { identifier, key } | { identifier, invite } | { identifier, secret } | { mode: 'linked' }).",
+    "Happy path: human Dynamic email OTP → mint invite → executeTool('geodesics_agent_login', { identifier, invite }) or { mode: 'linked' }.",
     "Join: executeTool('geodesics_join_network', { network: 'jury', key }).",
     "Leave: executeTool('geodesics_leave_trail', { origin, route }).",
+    "Snake (landing /): executeTool('geodesics_snake_start') then geodesics_snake_state / geodesics_snake_turn({ dir }).",
     "Do not POST /api/trails from curl.",
 ].join(" ")

@@ -133,8 +133,38 @@ export function dispatchAgentNavigate(href: string, closeAgentLogin = true) {
     )
 }
 
-export function dispatchOpenAgentLogin() {
-    window.dispatchEvent(new CustomEvent(AGENT_OPEN_LOGIN_EVENT))
+export type AuthLoginIntent = "human" | "agent"
+
+export type OpenAgentLoginDetail = {
+    intent?: AuthLoginIntent
+}
+
+const AUTH_INTENT_KEY = "geodesics_auth_intent"
+
+export function readAuthLoginIntent(): AuthLoginIntent | null {
+    if (typeof window === "undefined") return null
+    try {
+        const v = sessionStorage.getItem(AUTH_INTENT_KEY)
+        return v === "human" || v === "agent" ? v : null
+    } catch {
+        return null
+    }
+}
+
+export function dispatchOpenAgentLogin(detail?: OpenAgentLoginDetail) {
+    const intent = detail?.intent
+    try {
+        if (intent === "human" || intent === "agent") {
+            sessionStorage.setItem(AUTH_INTENT_KEY, intent)
+        }
+    } catch {
+        /* ignore */
+    }
+    window.dispatchEvent(
+        new CustomEvent<OpenAgentLoginDetail>(AGENT_OPEN_LOGIN_EVENT, {
+            detail: detail ?? {},
+        })
+    )
 }
 
 export function completeAgentLogin(agent: VisitorAgentSession) {

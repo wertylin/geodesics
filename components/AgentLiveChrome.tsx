@@ -9,7 +9,10 @@ import { TrustNetworkPanel } from "@/components/LiveNetwork"
 import {
     AGENT_OPEN_LOGIN_EVENT,
     AGENT_SESSION_EVENT,
+    readAuthLoginIntent,
     readVisitorAgentSession,
+    type AuthLoginIntent,
+    type OpenAgentLoginDetail,
     type VisitorAgentSession,
 } from "@/lib/agent-session"
 
@@ -28,10 +31,12 @@ export function AgentLiveChrome() {
     const [open, setOpen] = useState(false)
     const [mode, setMode] = useState<DeskMode>("dock")
     const [session, setSession] = useState<VisitorAgentSession | null>(null)
+    const [authIntent, setAuthIntent] = useState<AuthLoginIntent | null>(null)
 
     useEffect(() => {
         const live = readVisitorAgentSession()
         setSession(live)
+        setAuthIntent(readAuthLoginIntent())
         try {
             setOpen(sessionStorage.getItem(OPEN_KEY) === "1")
             const m = sessionStorage.getItem(MODE_KEY)
@@ -45,9 +50,11 @@ export function AgentLiveChrome() {
             const next = (e as CustomEvent<VisitorAgentSession | null>).detail ?? null
             setSession(next)
         }
-        const onOpenLogin = () => {
+        const onOpenLogin = (e: Event) => {
+            const detail = (e as CustomEvent<OpenAgentLoginDetail>).detail
+            const intent = detail?.intent ?? readAuthLoginIntent()
+            if (intent === "human" || intent === "agent") setAuthIntent(intent)
             setOpen(true)
-            // Authed “open live” prefers dashboard — room to work.
             if (readVisitorAgentSession()) setMode("dashboard")
         }
         window.addEventListener(AGENT_SESSION_EVENT, onSession)
@@ -141,7 +148,7 @@ export function AgentLiveChrome() {
                             <TrustNetworkPanel />
                         </>
                     ) : (
-                        <AuthTerminal />
+                        <AuthTerminal initialIntent={authIntent} />
                     )}
                 </div>
             ) : null}

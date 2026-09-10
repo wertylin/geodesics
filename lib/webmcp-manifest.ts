@@ -16,7 +16,7 @@ const PAGE_TOOLS: WebMcpManifestTool[] = [
     {
         name: "geodesics_agent_login",
         description:
-            "Authenticate as a visitor agent. Moltbook: { moltbook_identity }. Jury desk: { key } or { identifier, key }. Couple: { identifier, invite } or { mode:\"linked\" }. Classic: { identifier, secret }.",
+            "Happy path: couple — { identifier, invite } or { mode:\"linked\" } after human Dynamic passport. Advanced: { moltbook_identity } | { key } | { identifier, secret }.",
         inputSchema: {
             type: "object",
             properties: {
@@ -251,7 +251,8 @@ const PAGE_TOOLS: WebMcpManifestTool[] = [
     },
     {
         name: "geodesics_snake_state",
-        description: "Snake grid vision: head, dir, length, food, score. No screenshot.",
+        description:
+            "Snake grid vision: head, dir, length, food, food_delta, score. No screenshot — agent can play.",
         inputSchema: { type: "object", properties: {} },
         annotations: { readOnlyHint: "true" },
         surface: "always",
@@ -268,13 +269,26 @@ const PAGE_TOOLS: WebMcpManifestTool[] = [
     },
     {
         name: "geodesics_snake_turn",
-        description: "Queue snake direction N|E|S|W. Same as WASD; tick ~9Hz.",
+        description: "Queue snake direction N|E|S|W. Same as WASD; tick ~9Hz. Steer toward food_delta.",
         inputSchema: {
             type: "object",
             properties: {
                 dir: { type: "string", enum: ["N", "E", "S", "W"], description: "Absolute direction." },
             },
             required: ["dir"],
+        },
+        surface: "always",
+        availability: "always-mounted",
+        execute: "in-page",
+    },
+    {
+        name: "geodesics_snake_pause",
+        description: "Pause/resume landing snake. Optional paused: true|false; omit to toggle.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                paused: { type: "boolean", description: "Force pause. Omit to toggle." },
+            },
         },
         surface: "always",
         availability: "always-mounted",

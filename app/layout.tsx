@@ -37,8 +37,8 @@ export const metadata: Metadata = {
   },
 }
 export const viewport: Viewport = {
-  colorScheme: 'dark light',
-  themeColor: '#000000',
+  colorScheme: 'light dark',
+  themeColor: '#f4ebe3',
 }
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const originTrialScript = getWebMcpOriginTrialScriptSrc()

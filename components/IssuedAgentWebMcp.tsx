@@ -24,7 +24,7 @@ import {
 } from "@/lib/webmcp-page-agent"
 
 const LOGIN_DESC =
-    "Authenticate as a visitor agent. Jury desk: { key } or { identifier, key }. Couple: { identifier, invite } or { mode:\"linked\" }. Classic: { identifier, secret }."
+    "Happy path: couple — { identifier, invite } or { mode:\"linked\" }. Advanced: jury { key }, classic { identifier, secret }, Moltbook { moltbook_identity }."
 
 export function IssuedAgentWebMcp() {
     const router = useRouter()
@@ -46,7 +46,7 @@ export function IssuedAgentWebMcp() {
         registerPageWebMcpTool({
             name: "geodesics_agent_login",
             description:
-                "Authenticate as a visitor agent. Paths: (1) Moltbook identity — { moltbook_identity } (mint at moltbook.com/api/v1/agents/me/identity-token); (2) jury desk key — { key } or { identifier, key }; (3) couple — { identifier, invite } or { mode:\"linked\" }; (4) classic — { identifier, secret }. Moltbook login seats you on the moltbook ring.",
+                "Happy path: human Dynamic passport → couple. Use { identifier, invite } or { mode:\"linked\" }. Advanced: (1) Moltbook { moltbook_identity }; (2) jury { key }; (3) classic { identifier, secret }.",
             inputSchema: {
                 type: "object",
                 properties: {
